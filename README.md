@@ -124,6 +124,26 @@ Creadas con `sql/init_timescale.sql`:
 
 ## Fase 3 — Analítica en Streamlit
 
+### Cómo se construyó
+
+La app está desarrollada en Python usando **Streamlit** como framework de visualización interactiva. Se usaron las siguientes librerías:
+
+- **pandas** y **numpy** para manipulación y transformación de datos
+- **plotly** para gráficos interactivos (series de tiempo, histogramas, heatmaps, boxplots)
+- **scikit-learn** para los dos modelos de Machine Learning
+- **requests** para consumir la API REST desde la propia app
+- **sqlalchemy** para la conexión directa a PostgreSQL si se requiere
+
+Los datos se obtienen desde la API FastAPI mediante `GET /api/v1/lecturas`, se pivotean por timestamp para alinear las lecturas de temperatura y humedad en una sola fila, y se procesan en memoria con pandas antes de renderizarse.
+
+La app se divide en 5 secciones navegables desde la barra lateral:
+
+- **EDA y Filtros** — estadística descriptiva, serie de tiempo con media móvil y filtros dinámicos de fecha, variable y rango de valores
+- **Limpieza de datos** — eliminación de duplicados, imputación de nulos por interpolación y filtrado de outliers por IQR
+- **Detección de Outliers** — combinación de método IQR y Z-Score con visualización en serie de tiempo y descarga en CSV
+- **Correlación** — heatmap de Pearson y dispersión con línea de tendencia OLS
+- **Machine Learning** — Random Forest Regressor (predice humedad) y Random Forest Classifier (predice si necesita riego), ambos con métricas, gráficos y prueba manual interactiva
+
 ### Levantar la app
 
 ```powershell
@@ -141,62 +161,6 @@ En la barra lateral seleccionar **"API (FastAPI local)"** con:
 - sensor_id de humedad: `5`
 
 O **"Simulados (demo)"** para usar datos sintéticos sin necesidad de conexión.
-
-### Secciones de la app
-
-#### 📊 EDA y Filtros
-Punto de entrada principal de la app. Muestra un resumen general de los datos capturados por el ESP32:
-- **4 métricas** en la parte superior: total de registros, humedad promedio, temperatura promedio y rango de fechas activo.
-- **Estadística descriptiva** (media, desviación estándar, mínimo, máximo, percentiles) de ambas variables.
-- **Serie de tiempo interactiva** con los datos crudos y una media móvil ajustable (de 10 a 500 muestras) para suavizar el ruido del sensor.
-- **Histogramas con boxplot** para visualizar la distribución de cada variable.
-- **Filtros dinámicos** en la barra lateral:
-  - Rango de fechas (desde / hasta)
-  - Selección de variables a graficar
-  - Filtro por rango de valor numérico de cualquier variable
-  - Opción para excluir outliers con IQR
-
-#### 🧹 Limpieza de datos
-Muestra el proceso de limpieza aplicado automáticamente sobre los datos filtrados:
-1. **Eliminación de duplicados** exactos.
-2. **Imputación de nulos** por interpolación lineal temporal (apropiado para series de tiempo).
-3. **Filtrado de outliers** por rango intercuartílico (IQR), activable desde la barra lateral.
-
-Incluye un reporte con el número de filas originales, filas finales, nulos detectados por columna, duplicados eliminados y outliers removidos. También muestra un **boxplot comparativo antes/después** de la limpieza.
-
-#### 🔍 Detección de Outliers
-Detecta valores atípicos combinando dos métodos estadísticos:
-- **IQR** (Rango Intercuartílico): marca como outlier todo valor fuera de Q1 − factor×IQR y Q3 + factor×IQR. El factor es ajustable desde la UI (1.0 a 3.0).
-- **Z-Score**: marca como outlier todo valor cuyo puntaje Z supere un umbral configurable (1.5 a 4.0, por defecto ±3).
-
-Un punto se considera anómalo si lo detecta **cualquiera** de los dos métodos. La sección muestra:
-- Métricas: total de registros, cantidad y porcentaje de outliers detectados, rango normal IQR.
-- **Serie de tiempo** con los outliers resaltados en rojo y líneas de límite.
-- **Boxplot** con los puntos sospechosos marcados.
-- **Tabla descargable** en CSV con todos los registros anómalos y sus puntajes Z.
-
-#### 🔗 Correlación
-Analiza la relación estadística entre humedad y temperatura:
-- **Heatmap de correlación de Pearson** entre ambas variables, usando los datos ya limpios y filtrados.
-- **Gráfico de dispersión** temperatura vs. humedad con línea de tendencia OLS y coloreado por hora del día (para identificar si el momento del día influye).
-- Muestra el **coeficiente de correlación** exacto con interpretación directa.
-
-#### 🤖 Machine Learning
-Dos modelos entrenados con los datos reales del ESP32, usando temperatura y la hora del día (codificada en seno/coseno para capturar la ciclicidad) como variables predictoras.
-
-**Modelo 1 — Random Forest Regressor** (pestaña "Regresión"):
-- **Objetivo:** predecir el porcentaje de humedad del suelo.
-- **Métricas:** R² (qué tanto explica el modelo), MAE (error absoluto medio en %), RMSE (error cuadrático medio en %).
-- Gráfico de **real vs. predicho** sobre una muestra de 200 puntos.
-- **Importancia de variables**: qué variable aporta más al modelo.
-- **Prueba manual interactiva**: ingresás una temperatura y una hora y el modelo predice la humedad estimada.
-
-**Modelo 2 — Random Forest Classifier** (pestaña "Clasificación"):
-- **Objetivo:** clasificar si la planta necesita riego (humedad < 30%).
-- **Métricas:** accuracy, cantidad de casos positivos en el set de prueba.
-- **Matriz de confusión** para ver verdaderos/falsos positivos y negativos.
-- Reporte de clasificación completo (precision, recall, F1).
-- **Prueba manual interactiva**: ingresás temperatura y hora y el modelo dice si necesita riego con su probabilidad.
 
 ---
 
