@@ -144,6 +144,15 @@ La app se divide en 5 secciones navegables desde la barra lateral:
 - **Correlación** — heatmap de Pearson y dispersión con línea de tendencia OLS
 - **Machine Learning** — Random Forest Regressor (predice humedad) y Random Forest Classifier (predice si necesita riego), ambos con métricas, gráficos y prueba manual interactiva
 
+### Filtros dinámicos disponibles en la barra lateral
+
+Todos los filtros aplican sobre los datos en memoria (pandas) y afectan todas las secciones de la app simultáneamente:
+
+- **Rango de fechas** — selecciona el periodo de tiempo a analizar (desde / hasta). Se actualiza automáticamente con el rango de los datos cargados.
+- **Variables a analizar** — elige qué sensores mostrar en las gráficas (humedad, temperatura o ambos).
+- **Rango de valor** — filtra registros por un rango numérico de la variable seleccionada. Útil para excluir lecturas fuera de un rango esperado.
+- **Excluir outliers (IQR)** — activa el filtrado automático de valores atípicos usando el rango intercuartílico. Afecta la limpieza, correlación y ML.
+
 ### Levantar la app
 
 ```powershell
