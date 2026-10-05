@@ -45,18 +45,25 @@ class LecturaService:
                 dispositivo.id_dispositivo, lectura_in.tipo_sensor
             )
 
-            # 2. Validar rango físico del tipo de sensor
-            tipo = sensor.tipo_sensor
+            # 2. Cargar explícitamente el tipo de sensor
+            tipo = self.dispositivo_repo.obtener_tipo_sensor_por_codigo(lectura_in.tipo_sensor)
+            if tipo is None:
+                raise ValueError(f"Tipo de sensor '{lectura_in.tipo_sensor}' no encontrado")
+
             valor = float(lectura_in.valor)
             fuera_de_rango = not (
                 float(tipo.valor_min_fisico) <= valor <= float(tipo.valor_max_fisico)
             )
 
+            # 3. Guardar la lectura con microsegundos únicos por sensor
+            from datetime import timedelta
+            tiempo_sensor = tiempo_ahora + timedelta(microseconds=payload.lecturas.index(lectura_in))
+
             # 3. Guardar la lectura
             lectura = self.lectura_repo.crear(
                 id_sensor=sensor.id_sensor,
                 valor=valor,
-                tiempo=tiempo_ahora,
+                tiempo=tiempo_sensor,
             )
 
             # 4. Verificar umbral y registrar alerta si corresponde
@@ -72,7 +79,7 @@ class LecturaService:
                     self.lectura_repo.registrar_alerta(
                         id_sensor=sensor.id_sensor,
                         id_umbral=umbral.id_umbral,
-                        tiempo_lectura=tiempo_ahora,
+                        tiempo_lectura=tiempo_sensor,
                         valor=valor,
                     )
                     alerta_generada = True
@@ -89,7 +96,7 @@ class LecturaService:
                     outlier_detectado = True
                     self.lectura_repo.registrar_outlier(
                         id_sensor=sensor.id_sensor,
-                        tiempo_lectura=tiempo_ahora,
+                        tiempo_lectura=tiempo_sensor,
                         valor=valor,
                         z_score=z_score,
                         metodo="zscore",
