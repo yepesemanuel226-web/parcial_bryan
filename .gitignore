@@ -1,0 +1,25 @@
+# Entorno virtual
+.venv/
+venv/
+
+# Variables de entorno (contienen passwords)
+.env
+fastapi_iot_api/.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Streamlit
+.streamlit/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
