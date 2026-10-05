@@ -1,97 +1,173 @@
-# API IoT - Taller Integrador (Grupo D)
+# API IoT — fastapi_iot_api
 
-API REST en FastAPI que recibe datos de un ESP32 con dos sensores:
-- **DS18B20** (temperatura digital, 1-Wire)
-- **Sensor de humedad de suelo capacitivo v2.0** (analógico)
+API REST en FastAPI que recibe los datos del ESP32 y los guarda en Neon.  
+Está desplegada en Render: https://parcial-bryan.onrender.com
 
-Los valida y los guarda en PostgreSQL con **TimescaleDB**.
+---
 
-## Estructura del proyecto (POO por capas)
+## Estructura
 
 ```
 app/
-  core/         -> configuración y conexión a la base de datos
-  models/       -> modelos SQLAlchemy (= tablas de PostgreSQL)
-  schemas/      -> validación de entrada/salida con Pydantic
-  repositories/ -> clases que hacen las consultas SQL (una por entidad)
-  services/     -> lógica de negocio (validación de rango, anomalías)
-  routers/      -> endpoints HTTP
-  middleware/   -> log de auditoría de cada petición
-  main.py       -> arma la app y registra routers/middleware
+  core/         configuración y conexión a la BD
+  models/       tablas de PostgreSQL en SQLAlchemy
+  schemas/      validación de entrada/salida con Pydantic
+  repositories/ consultas SQL
+  services/     lógica de negocio (rangos, alertas, outliers)
+  routers/      endpoints HTTP
+  middleware/   log de peticiones en consola
+  main.py       punto de entrada
 sql/
-  init_timescale.sql -> script para que tu compañera cree la BD (usa
-                         EXACTAMENTE los mismos nombres que los modelos)
+  init_timescale.sql  script original de creación de tablas
 ```
 
-## Cómo correrla localmente
+---
 
-```bash
+## Correr localmente
+
+```powershell
+cd fastapi_iot_api
 python -m venv venv
-source venv/bin/activate        # en Windows: venv\Scripts\activate
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-
-cp .env.example .env            # y edita DATABASE_URL con los datos reales
-# tu compañera te pasa host/usuario/password de PostgreSQL
-
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --reload
 ```
 
-Documentación interactiva automática: http://127.0.0.1:8000/docs
+Swagger en: http://127.0.0.1:8000/docs
 
-## Coordinación con tu compañera (base de datos)
+---
 
-1. Pásale `sql/init_timescale.sql` — es el script que crea las 7 tablas
-   (grupos, dispositivos, tipos_sensor, sensores, lecturas, alertas,
-   api_logs) con TimescaleDB ya configurado.
-2. Ella corre ese script en PostgreSQL (necesita la extensión
-   `timescaledb` instalada) y te devuelve la cadena de conexión.
-3. Si ella necesita cambiar un nombre de columna, avísale a quien toque
-   el modelo correspondiente en `app/models/` — **los dos archivos
-   tienen que coincidir siempre**.
+## Convenciones del código — léelas antes de tocar algo
 
-## Flujo completo para probar con tus compañeros
+Estos son los valores exactos que deben coincidir entre la BD, la API y el ESP32.
+Si cambias uno en un lado, cámbialo en todos.
 
-1. **Base de datos**: correr `sql/init_timescale.sql`.
-2. **API** (tú): `uvicorn app.main:app --reload`.
-3. Registrar el dispositivo una vez (lo hace quien programa el ESP32,
-   o tú mismo para probar):
+### Códigos de sensor
 
-```bash
-curl -X POST http://127.0.0.1:8000/api/v1/dispositivos \
-  -H "Content-Type: application/json" \
-  -d '{"grupo_id": 1, "nombre": "ESP32-D", "mac_address": "AA:BB:CC:DD:EE:01", "ubicacion": "Maceta 1"}'
+En la tabla `sensores` (columna `codigo`) y en el ESP32 (`tipo_sensor`), los valores son exactamente estos, en minúsculas y con guión bajo:
+
+```
+temperatura_ds18b20
+humedad_suelo_capacitivo
 ```
 
-4. **ESP32** (o `curl` para probar sin el hardware) envía lecturas:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/v1/lecturas \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: cambia-esta-clave-por-una-segura" \
-  -d '{
-        "mac_address": "AA:BB:CC:DD:EE:01",
-        "lecturas": [
-          {"tipo_sensor": "temperatura_ds18b20", "valor": 24.6},
-          {"tipo_sensor": "humedad_suelo_capacitivo", "valor": 63.2}
-        ]
-      }'
+En el ESP32 el payload se ve así:
+```json
+{
+  "tipo_sensor": "temperatura_ds18b20",
+  "valor": 35.25
+}
 ```
 
-5. **Streamlit / Power BI** consumen:
-   - `GET /api/v1/lecturas` (con filtros `sensor_id`, `desde`, `hasta`)
-     para pruebas rápidas desde la API.
-   - Power BI, según el taller, debe conectarse **directo a
-     PostgreSQL** (no a la API), así que a tu compañera de BD le sirve
-     tener el connection string listo para eso también.
+En la BD la columna `sensores.codigo` tiene exactamente ese mismo texto.  
+En `tipos_sensor.nombre` también debe coincidir exactamente.
 
-## Notas
+### MAC address del ESP32
 
-- Los rangos válidos de cada sensor están en la tabla `tipos_sensor`
-  (`valor_min`/`valor_max`). Ahora mismo puse -10°C a 60°C para la
-  temperatura y 0% a 100% para la humedad — ajústalos si tu docente
-  definió otros rangos.
-- Cualquier lectura fuera de rango se guarda igual (para no perder el
-  dato) pero además genera un registro en `alertas`, que es lo que
-  pide el punto de "identificar valores atípicos".
-- La API key del ESP32 (`X-API-Key`) es solo un control simple para
-  que no cualquiera pueda escribir en la base de datos.
+En el código del ESP32:
+```cpp
+const char* MAC_ESP32 = "20:43:a8:66:81:5c";
+```
+
+En la BD (`dispositivos.direccion_mac`) debe estar guardada igual:
+```
+20:43:a8:66:81:5c
+```
+Minúsculas, con dos puntos. Si la cambias en el ESP32, actualízala en la BD también.
+
+### API Key
+
+En el ESP32:
+```cpp
+const char* API_KEY = "1UmaEZRqgtvfpNQx4zcYsVwn";
+```
+
+En el `.env` de la API:
+```env
+API_KEY_ESP32=1UmaEZRqgtvfpNQx4zcYsVwn
+```
+
+En Render, en las variables de entorno, el mismo valor.  
+El ESP32 la manda en el header `X-API-Key`. Si no coincide, la API devuelve 401.
+
+### Estado de alertas
+
+La tabla `alertas` tiene un check constraint que solo acepta estos valores en la columna `estado`, en mayúsculas:
+
+```
+ACTIVA
+RECONOCIDA
+RESUELTA
+```
+
+En el código de la API (`models/alerta.py` y `repositories/lectura_repository.py`) se usa `"ACTIVA"`. No cambies eso a minúsculas o la BD lo rechaza.
+
+### Intervalo de envío
+
+El ESP32 envía cada 20 segundos:
+```cpp
+const long intervaloCaptura = 20000;
+```
+
+En la BD (`dispositivos.intervalo_envio_seg`) el valor registrado es `20`.
+
+### URL de la API en el ESP32
+
+```cpp
+const char* API_URL = "https://parcial-bryan.onrender.com/api/v1/lecturas";
+```
+
+Si cambian la URL de Render, hay que actualizar esa línea y volver a subir el código al ESP32.
+
+---
+
+## Endpoints
+
+| Método | Ruta | Header requerido | Descripción |
+|--------|------|-----------------|-------------|
+| GET | `/health` | — | La API está viva |
+| POST | `/api/v1/dispositivos` | — | Registrar ESP32 por MAC |
+| GET | `/api/v1/dispositivos` | — | Ver dispositivos |
+| GET | `/api/v1/dispositivos/{mac}` | — | Buscar por MAC |
+| POST | `/api/v1/lecturas` | `X-API-Key` | El ESP32 manda lecturas |
+| GET | `/api/v1/lecturas` | — | Historial de lecturas |
+| GET | `/api/v1/alertas` | — | Alertas generadas |
+| GET | `/api/v1/outliers` | — | Outliers por z-score |
+| POST | `/api/v1/conexion` | `X-API-Key` | Estado WiFi del ESP32 |
+| POST | `/api/v1/menu` | `X-API-Key` | Tecla pulsada en el teclado |
+
+---
+
+## Formato del POST que manda el ESP32
+
+```json
+POST /api/v1/lecturas
+X-API-Key: 1UmaEZRqgtvfpNQx4zcYsVwn
+Content-Type: application/json
+
+{
+  "mac_address": "20:43:a8:66:81:5c",
+  "lecturas": [
+    {"tipo_sensor": "temperatura_ds18b20",     "valor": 35.25},
+    {"tipo_sensor": "humedad_suelo_capacitivo", "valor": 60.0}
+  ]
+}
+```
+
+Si la API responde `201` todo salió bien.  
+Si responde `404` el dispositivo no está registrado en la BD.  
+Si responde `401` la API key no coincide.  
+Si responde `500` hay un error interno — revisar los logs en Render.
+
+---
+
+## Variables de entorno
+
+Crear `fastapi_iot_api/.env` (no subir a git):
+
+```env
+DATABASE_URL=postgresql+psycopg2://neondb_owner:PASSWORD@ep-misty-snow-b76w9eax-pooler.c-13.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+API_KEY_ESP32=1UmaEZRqgtvfpNQx4zcYsVwn
+```
+
+En Render estas mismas dos variables van en **Environment → Add variable**.
