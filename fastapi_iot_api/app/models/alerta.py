@@ -12,7 +12,7 @@ class Alerta(Base):
     id_umbral = Column(SmallInteger, ForeignKey("umbrales_alerta.id_umbral"), nullable=False)
     tiempo_lectura = Column(DateTime(timezone=True), nullable=False)
     valor = Column(Float, nullable=False)
-    estado = Column(String(20), nullable=False, default="activa")
+    estado = Column(String(20), nullable=False, default="ACTIVA")
     creada_en = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     resuelta_en = Column(DateTime(timezone=True), nullable=True)
 

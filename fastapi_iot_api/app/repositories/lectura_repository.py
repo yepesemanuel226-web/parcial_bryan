@@ -76,7 +76,7 @@ class LecturaRepository:
             id_umbral=id_umbral,
             tiempo_lectura=tiempo_lectura,
             valor=valor,
-            estado="activa",
+            estado="ACTIVA",
         )
         self.db.add(alerta)
         self.db.commit()
