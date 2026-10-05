@@ -38,7 +38,7 @@ const char* password = "Ermelinda58";
 // ============================================================
 //  CONFIGURACIÓN API
 // ============================================================
-const char* API_URL   = "http://192.168.101.10:8000/api/v1/lecturas";
+const char* API_URL   = "https://parcial-bryan.onrender.com/api/v1/lecturas";
 const char* API_KEY   = "1UmaEZRqgtvfpNQx4zcYsVwn";
 const char* MAC_ESP32 = "20:43:a8:66:81:5c";
 
@@ -391,17 +391,44 @@ int contarAlertas() {
 }
 
 // ============================================================
+//  REPORTE DE TECLA PULSADA A LA API
+// ============================================================
+void reportarTecla(char tecla) {
+  if (!wifiConectado) return;
+
+  HTTPClient http;
+  http.begin("https://parcial-bryan.onrender.com/api/v1/menu");
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("X-API-Key", API_KEY);
+
+  StaticJsonDocument<128> doc;
+  doc["mac_address"] = MAC_ESP32;
+  char teclaStr[2] = { tecla, '\0' };
+  doc["tecla"] = teclaStr;
+
+  String body;
+  serializeJson(doc, body);
+
+  int httpCode = http.POST(body);
+  Serial.print("[MENU] Tecla '");
+  Serial.print(tecla);
+  Serial.print("' reportada → HTTP ");
+  Serial.println(httpCode);
+  http.end();
+}
+
+// ============================================================
 //  NAVEGACIÓN — acceso directo por número, según tabla del taller
 // ============================================================
 void procesarTecla(char tecla) {
   switch (tecla) {
-    case '1': estadoActual = PANTALLA_TIEMPO_REAL;    break;
-    case '2': estadoActual = PANTALLA_PROMEDIO_HORA;  break;
-    case '3': estadoActual = PANTALLA_MAX_MIN_DIA;    break;
-    case '4': estadoActual = PANTALLA_DESV_TENDENCIA; break;
-    case '5': estadoActual = PANTALLA_OUTLIERS;       break;
-    case '6': estadoActual = PANTALLA_ALERTAS;        break;
-    case '7': estadoActual = PANTALLA_CONEXION_NUBE;  break;
+    case '1': estadoActual = PANTALLA_TIEMPO_REAL;    reportarTecla(tecla); break;
+    case '2': estadoActual = PANTALLA_PROMEDIO_HORA;  reportarTecla(tecla); break;
+    case '3': estadoActual = PANTALLA_MAX_MIN_DIA;    reportarTecla(tecla); break;
+    case '4': estadoActual = PANTALLA_DESV_TENDENCIA; reportarTecla(tecla); break;
+    case '5': estadoActual = PANTALLA_OUTLIERS;       reportarTecla(tecla); break;
+    case '6': estadoActual = PANTALLA_ALERTAS;        reportarTecla(tecla); break;
+    case '7': estadoActual = PANTALLA_CONEXION_NUBE;  reportarTecla(tecla); break;
     case '#': // Volver al inicio
     case '*': // Confirmar / volver (misma función que '#')
       estadoActual = PANTALLA_INICIO;
