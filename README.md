@@ -1,17 +1,17 @@
-# 🌱 Sistema de Monitoreo Agrícola IoT
+# 🌡️ Sistema IoT — Medición de Temperatura y Humedad
 ### Taller 1 — Corte 2 — Minería de Datos
 
-Sistema completo de extremo a extremo para monitoreo de cultivos en tiempo real. Un ESP32 lee temperatura del suelo y humedad cada 20 segundos, los envía a una API desplegada en la nube, los almacena en PostgreSQL con TimescaleDB y los analiza con KNIME y FlowiseAI.
+Un ESP32 lee temperatura y humedad cada 20 segundos, los manda a una API en la nube, los guarda en PostgreSQL con TimescaleDB y los analiza con KNIME y FlowiseAI.
 
 ---
 
-## 🏗️ Arquitectura general
+## 🏗️ Arquitectura
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        HARDWARE                             │
-│  DS18B20 (temperatura) + Sensor capacitivo (humedad)        │
-│                ESP32 + Teclado 4x4 + LCD I2C                │
+│         DS18B20 (temperatura) + Sensor capacitivo           │
+│              ESP32 + Teclado 4x4 + LCD I2C                  │
 └──────────────────────────┬──────────────────────────────────┘
                            │  HTTP POST cada 20s
                            ▼
@@ -44,8 +44,8 @@ Sistema completo de extremo a extremo para monitoreo de cultivos en tiempo real.
 parcial_bryan/
 │
 ├── 📄 README.md                    ← estás aquí
-├── 📄 requirements.txt             ← dependencias del proyecto completo
-├── 📄 .env.example                 ← plantilla de variables de entorno
+├── 📄 requirements.txt
+├── 📄 .env.example
 ├── 📄 app.py                       ← dashboard Streamlit
 │
 ├── 📂 esp32_sensor/
@@ -57,11 +57,11 @@ parcial_bryan/
     ├── 📄 requirements.txt
     ├── 📄 runtime.txt              ← fuerza Python 3.11 en Render
     ├── 📂 sql/
-    │   └── init_timescale.sql      ← script original de creación de tablas
+    │   └── init_timescale.sql
     └── 📂 app/
-        ├── main.py                 ← punto de entrada FastAPI
+        ├── main.py
         ├── 📂 core/                ← configuración y conexión a BD
-        ├── 📂 models/              ← 12 modelos ORM (uno por tabla)
+        ├── 📂 models/              ← 12 modelos ORM
         ├── 📂 schemas/             ← validación Pydantic
         ├── 📂 repositories/        ← consultas SQL
         ├── 📂 services/            ← lógica de negocio
@@ -77,7 +77,7 @@ parcial_bryan/
 
 | Componente | Pin ESP32 | Notas |
 |------------|-----------|-------|
-| DS18B20 (temperatura) | GPIO 4 | Protocolo OneWire, requiere resistencia 4.7kΩ |
+| DS18B20 (temperatura) | GPIO 4 | OneWire, resistencia pull-up 4.7kΩ |
 | Sensor capacitivo (humedad) | GPIO 34 | Señal analógica ADC |
 | LCD I2C — SDA | GPIO 22 | Dirección I2C: 0x27 |
 | LCD I2C — SCL | GPIO 23 | |
@@ -92,40 +92,38 @@ parcial_bryan/
 
 ### Menú del teclado matricial
 
-| Tecla | Qué muestra en el LCD | Concepto analítico aplicado |
-|-------|----------------------|----------------------------|
-| `1` | Valor actual de temperatura y humedad | Estadística descriptiva en tiempo real |
-| `2` | Promedio de la última hora | Media aritmética sobre el buffer |
+| Tecla | Qué muestra en el LCD | Concepto analítico |
+|-------|----------------------|--------------------|
+| `1` | Temperatura y humedad actuales | Estadística descriptiva |
+| `2` | Promedio de la última hora | Media aritmética |
 | `3` | Máximo y mínimo desde el encendido | Rango estadístico |
-| `4` | Desviación estándar y tendencia | Dispersión + comparación de mitades |
+| `4` | Desviación estándar y tendencia | Dispersión y regresión |
 | `5` | Si la última lectura es outlier | Z-score > 2.0 |
 | `6` | Cuántas lecturas superaron el umbral | Detección de anomalías |
 | `7` | Estado WiFi y conexión a la nube | Monitoreo del sistema |
-| `#` / `*` | Volver a la pantalla de inicio | — |
+| `#` / `*` | Volver al inicio | — |
 
-La pantalla vuelve sola al inicio después de 15 segundos sin actividad.
+La pantalla vuelve sola al inicio tras 15 segundos de inactividad.
 
 ### Calibración del sensor de humedad
 
-El sensor capacitivo requiere calibración según el suelo donde se use:
-
 ```cpp
-int valorSeco   = 3400;  // lectura RAW al aire (~3400-3500)
-int valorHumedo = 1600;  // lectura RAW en tierra saturada (~1400-1600)
+int valorSeco   = 3400;  // lectura RAW al aire
+int valorHumedo = 1600;  // lectura RAW en tierra saturada
 ```
 
-Si los valores de humedad no tienen sentido, ajusta estos dos números
-leyendo el RAW en el Serial Monitor con el sensor al aire y sumergido.
+Si los valores no tienen sentido, lee el RAW en el Serial Monitor
+con el sensor al aire y en tierra, y ajusta estos dos números.
 
 ### Librerías requeridas en Arduino IDE
 
-Instálalas desde **Herramientas → Administrar bibliotecas**:
+Instalar desde **Herramientas → Administrar bibliotecas**:
 
-| Librería | Autor | Para qué se usa |
-|----------|-------|-----------------|
-| `OneWire` | Paul Stoffregen | Comunicación con el DS18B20 |
-| `DallasTemperature` | Miles Burton | Leer temperatura del DS18B20 |
-| `LiquidCrystal I2C` | Frank de Brabander | Controlar la pantalla LCD |
+| Librería | Autor | Para qué |
+|----------|-------|----------|
+| `OneWire` | Paul Stoffregen | Comunicación DS18B20 |
+| `DallasTemperature` | Miles Burton | Leer temperatura |
+| `LiquidCrystal I2C` | Frank de Brabander | Pantalla LCD |
 | `ArduinoJson` | Benoit Blanchon | Construir el JSON del POST |
 | `Keypad` | Mark Stanley | Leer el teclado matricial |
 
@@ -135,28 +133,28 @@ Instálalas desde **Herramientas → Administrar bibliotecas**:
 
 ## ☁️ Componente 2 — API REST (FastAPI en Render)
 
-La API está desplegada en: **https://parcial-bryan.onrender.com**  
-Documentación interactiva (Swagger): **https://parcial-bryan.onrender.com/docs**
+**URL:** https://parcial-bryan.onrender.com  
+**Swagger:** https://parcial-bryan.onrender.com/docs
 
-> ⚠️ Render en el plan gratuito hiberna el servicio tras 15 minutos de inactividad.
-> La primera petición puede tardar hasta 60 segundos mientras "despierta".
+> ⚠️ Render en plan gratuito hiberna tras 15 min de inactividad.
+> La primera petición puede tardar hasta 60s mientras despierta.
 
-### Endpoints disponibles
+### Endpoints
 
-| Método | Ruta | Autenticación | Descripción |
-|--------|------|---------------|-------------|
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
 | `GET` | `/health` | — | Verifica que la API está viva |
-| `POST` | `/api/v1/dispositivos` | — | Registra un ESP32 por su MAC |
-| `GET` | `/api/v1/dispositivos` | — | Lista todos los dispositivos |
-| `GET` | `/api/v1/dispositivos/{mac}` | — | Busca un dispositivo por MAC |
-| `POST` | `/api/v1/lecturas` | `X-API-Key` | El ESP32 manda sus lecturas aquí |
-| `GET` | `/api/v1/lecturas` | — | Historial con filtros de fecha y sensor |
-| `GET` | `/api/v1/alertas` | — | Lecturas que superaron un umbral |
-| `GET` | `/api/v1/outliers` | — | Valores atípicos detectados por z-score |
-| `POST` | `/api/v1/conexion` | `X-API-Key` | ESP32 reporta su estado WiFi |
-| `POST` | `/api/v1/menu` | `X-API-Key` | Registra qué tecla se pulsó |
+| `POST` | `/api/v1/dispositivos` | — | Registra el ESP32 por MAC |
+| `GET` | `/api/v1/dispositivos` | — | Lista dispositivos registrados |
+| `GET` | `/api/v1/dispositivos/{mac}` | — | Busca por MAC |
+| `POST` | `/api/v1/lecturas` | `X-API-Key` | El ESP32 manda sus lecturas |
+| `GET` | `/api/v1/lecturas` | — | Historial con filtros |
+| `GET` | `/api/v1/alertas` | — | Lecturas que superaron umbral |
+| `GET` | `/api/v1/outliers` | — | Outliers por z-score |
+| `POST` | `/api/v1/conexion` | `X-API-Key` | Estado WiFi del ESP32 |
+| `POST` | `/api/v1/menu` | `X-API-Key` | Tecla pulsada en el teclado |
 
-### Formato del POST que manda el ESP32
+### Formato del POST del ESP32
 
 ```json
 POST /api/v1/lecturas
@@ -174,32 +172,13 @@ Content-Type: application/json
 
 ### Códigos de respuesta
 
-| Código | Significa |
-|--------|-----------|
-| `201` | ✅ Lecturas guardadas correctamente |
-| `401` | ❌ La API key no coincide |
-| `404` | ❌ El dispositivo no está registrado en la BD |
-| `422` | ❌ El JSON tiene campos incorrectos |
+| Código | Qué significa |
+|--------|--------------|
+| `201` | ✅ Guardado correctamente |
+| `401` | ❌ API key incorrecta |
+| `404` | ❌ Dispositivo no registrado en la BD |
+| `422` | ❌ JSON con campos incorrectos |
 | `500` | ❌ Error interno — revisar logs en Render |
-
-### Correr la API localmente
-
-```powershell
-cd fastapi_iot_api
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-
-# Crear el .env con las variables reales (ver .env.example)
-python -m uvicorn app.main:app --reload
-```
-
-### Variables de entorno (.env)
-
-```env
-DATABASE_URL=postgresql+psycopg2://neondb_owner:PASSWORD@ep-misty-snow-b76w9eax-pooler.c-13.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
-API_KEY_ESP32=1UmaEZRqgtvfpNQx4zcYsVwn
-```
 
 ---
 
@@ -211,25 +190,25 @@ API_KEY_ESP32=1UmaEZRqgtvfpNQx4zcYsVwn
 
 | Tabla | Descripción |
 |-------|-------------|
-| `ubicaciones` | Lugares donde están instalados los dispositivos |
-| `dispositivos` | ESP32 registrados, identificados por MAC |
-| `tipos_sensor` | Catálogo de sensores con rangos físicos válidos |
-| `sensores` | Cada sensor físico conectado a cada dispositivo |
-| `lecturas` | ⭐ Hypertable TimescaleDB — todas las mediciones |
-| `niveles_alerta` | Niveles de severidad: bajo, medio, alto |
-| `umbrales_alerta` | Límites por tipo de sensor para generar alertas |
-| `alertas` | Lecturas que superaron un umbral |
-| `outliers_detectados` | Valores atípicos detectados por z-score |
-| `estado_conexion` | Historial de conexión WiFi del ESP32 |
-| `consultas_menu` | Registro de teclas pulsadas en el teclado |
-| `menu_opciones` | Catálogo de las 7 opciones del menú LCD |
+| `ubicaciones` | Lugares donde están los dispositivos |
+| `dispositivos` | ESP32 registrados por MAC |
+| `tipos_sensor` | Catálogo con rangos físicos válidos |
+| `sensores` | Cada sensor físico por dispositivo |
+| `lecturas` | ⭐ Hypertable — todas las mediciones |
+| `niveles_alerta` | Niveles: bajo, medio, alto |
+| `umbrales_alerta` | Límites por tipo de sensor |
+| `alertas` | Lecturas que pasaron un umbral |
+| `outliers_detectados` | Valores atípicos por z-score |
+| `estado_conexion` | Historial WiFi del ESP32 |
+| `consultas_menu` | Teclas pulsadas en el teclado |
+| `menu_opciones` | Catálogo de las 7 opciones del menú |
 
-### Volumen de datos esperado
+### Volumen esperado
 
 Con 2 sensores enviando cada 20 segundos:
 
-| Periodo | Lecturas por sensor | Total (2 sensores) |
-|---------|--------------------|--------------------|
+| Periodo | Por sensor | Total (2 sensores) |
+|---------|-----------|-------------------|
 | 1 hora | 180 | 360 |
 | 1 día | 4.320 | 8.640 |
 | 1 semana | 30.240 | 60.480 |
@@ -239,9 +218,9 @@ Con 2 sensores enviando cada 20 segundos:
 
 ## 📊 Componente 4 — Análisis en KNIME
 
-### Conexión a Neon desde KNIME
+### Conexión a Neon
 
-Usar el nodo **PostgreSQL Connector** con estos datos:
+Usar el nodo **PostgreSQL Connector**:
 
 | Campo | Valor |
 |-------|-------|
@@ -252,14 +231,12 @@ Usar el nodo **PostgreSQL Connector** con estos datos:
 | Password | pídela al equipo |
 | SSL | activado (`sslmode=require`) |
 
-URL JDBC (alternativa para pegar directo):
+URL JDBC directa:
 ```
 jdbc:postgresql://ep-misty-snow-b76w9eax-pooler.c-13.us-east-1.aws.neon.tech/neondb?sslmode=require
 ```
 
-### Query principal para el dataset
-
-Pegar en el nodo **DB Query Reader**. Une todas las tablas relevantes en un solo dataset:
+### Query principal
 
 ```sql
 SELECT
@@ -283,54 +260,46 @@ WHERE l.recibido_en >= '2026-10-05'
 ORDER BY l.tiempo DESC;
 ```
 
-> El filtro `recibido_en >= '2026-10-05'` es importante — excluye datos de prueba
-> cargados antes y deja solo las lecturas reales del ESP32.
+> El filtro `recibido_en >= '2026-10-05'` excluye datos de prueba anteriores.
 
-### Flujo de trabajo sugerido en KNIME
+### Flujo sugerido de nodos
 
 ```
 PostgreSQL Connector
         │
-        └── DB Query Reader  ──────────────────────────────────────┐
-                │                                                   │
-                └── DB to Table                              (tabla alertas)
+        └── DB Query Reader
+                │
+                └── DB to Table
                         │
-                        ├── Missing Value (imputación nulos)
-                        │
+                        ├── Missing Value ──── imputar nulos
                         ├── Duplicate Row Filter
+                        ├── Normalizer ──────── min-max o z-score
                         │
-                        ├── Normalizer (min-max o z-score)
+                        ├── Statistics ──────── descriptivos
+                        ├── Line Plot ───────── serie temporal
+                        ├── Scatter Plot ────── correlación
                         │
-                        ├── Statistics Node  ── descriptivos
-                        │
-                        ├── Scatter Plot / Line Plot  ── visualización
-                        │
-                        ├── Linear Regression / Moving Average  ── tendencia
-                        │
-                        └── CSV Writer  ── dataset limpio exportado
+                        └── CSV Writer ──────── dataset limpio
 ```
 
-### Tablas útiles para cada análisis
+### Tablas útiles según el análisis
 
-| Análisis | Tabla principal |
-|----------|----------------|
-| Serie temporal de mediciones | `lecturas` |
-| Análisis de anomalías | `alertas` + `umbrales_alerta` |
-| Validación de outliers | `outliers_detectados` |
-| Disponibilidad del sistema | `estado_conexion` |
+| Análisis | Tabla |
+|----------|-------|
+| Serie temporal | `lecturas` |
+| Anomalías | `alertas` + `umbrales_alerta` |
+| Outliers | `outliers_detectados` |
+| Disponibilidad | `estado_conexion` |
 | Uso del menú físico | `consultas_menu` |
 
 ---
 
-## ⚠️ Convenciones importantes
+## ⚠️ Convenciones — no cambies esto sin avisar
 
-Estos valores deben coincidir exactamente entre la BD, la API y el ESP32.
-Si cambias uno en un lado, cámbialo en todos.
-
-| Valor | Dónde aparece | Formato exacto |
-|-------|--------------|----------------|
-| Código sensor temperatura | ESP32 `tipo_sensor`, BD `sensores.codigo`, BD `tipos_sensor.nombre` | `temperatura_ds18b20` |
-| Código sensor humedad | ESP32 `tipo_sensor`, BD `sensores.codigo`, BD `tipos_sensor.nombre` | `humedad_suelo_capacitivo` |
-| MAC del ESP32 | ESP32 `MAC_ESP32`, BD `dispositivos.direccion_mac` | `20:43:a8:66:81:5c` |
-| API Key | ESP32 `API_KEY`, `.env` `API_KEY_ESP32`, Render env vars | `1UmaEZRqgtvfpNQx4zcYsVwn` |
-| Estado de alerta | BD `alertas.estado` (check constraint) | `ACTIVA` / `RECONOCIDA` / `RESUELTA` |
+| Valor | Dónde aparece | Exactamente así |
+|-------|--------------|-----------------|
+| Código sensor temperatura | ESP32, `sensores.codigo`, `tipos_sensor.nombre` | `temperatura_ds18b20` |
+| Código sensor humedad | ESP32, `sensores.codigo`, `tipos_sensor.nombre` | `humedad_suelo_capacitivo` |
+| MAC del ESP32 | ESP32, `dispositivos.direccion_mac` | `20:43:a8:66:81:5c` |
+| API Key | ESP32, `.env`, Render | `1UmaEZRqgtvfpNQx4zcYsVwn` |
+| Estado de alerta | `alertas.estado` (check constraint) | `ACTIVA` / `RECONOCIDA` / `RESUELTA` |

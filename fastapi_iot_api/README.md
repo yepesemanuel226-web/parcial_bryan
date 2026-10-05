@@ -1,167 +1,143 @@
-# API IoT — fastapi_iot_api
+# ⚡ API REST — fastapi_iot_api
 
-API REST en FastAPI que recibe los datos del ESP32 y los guarda en Neon.  
-Está desplegada en Render: https://parcial-bryan.onrender.com
-
----
-
-## Estructura
-
-```
-app/
-  core/         configuración y conexión a la BD
-  models/       tablas de PostgreSQL en SQLAlchemy
-  schemas/      validación de entrada/salida con Pydantic
-  repositories/ consultas SQL
-  services/     lógica de negocio (rangos, alertas, outliers)
-  routers/      endpoints HTTP
-  middleware/   log de peticiones en consola
-  main.py       punto de entrada
-sql/
-  init_timescale.sql  script original de creación de tablas
-```
+API en FastAPI que recibe las lecturas del ESP32 y las guarda en Neon.  
+Desplegada en Render: **https://parcial-bryan.onrender.com**  
+Swagger UI: **https://parcial-bryan.onrender.com/docs**
 
 ---
 
-## Correr localmente
+## 📁 Estructura interna
+
+```
+fastapi_iot_api/
+│
+├── 📄 .env                   ← variables reales (NO subir a git)
+├── 📄 .env.example           ← plantilla
+├── 📄 requirements.txt
+├── 📄 runtime.txt            ← fuerza Python 3.11 en Render
+│
+├── 📂 sql/
+│   └── init_timescale.sql    ← script original de creación de tablas
+│
+└── 📂 app/
+    ├── main.py               ← registra routers y middleware
+    │
+    ├── 📂 core/
+    │   ├── config.py         ← lee variables del .env con pydantic-settings
+    │   └── database.py       ← crea el engine SQLAlchemy y get_db()
+    │
+    ├── 📂 models/            ← una clase por tabla (ORM SQLAlchemy)
+    │   ├── ubicacion.py
+    │   ├── dispositivo.py
+    │   ├── tipo_sensor.py
+    │   ├── sensor.py
+    │   ├── lectura.py        ← hypertable TimescaleDB
+    │   ├── nivel_alerta.py
+    │   ├── umbral_alerta.py
+    │   ├── alerta.py
+    │   ├── outlier_detectado.py
+    │   ├── estado_conexion.py
+    │   ├── consulta_menu.py
+    │   └── menu_opcion.py
+    │
+    ├── 📂 schemas/           ← validación Pydantic de entrada y salida
+    │   ├── lectura.py        ← PayloadESP32, LecturaOut, AlertaOut, etc.
+    │   └── dispositivo.py    ← DispositivoCreate, DispositivoOut
+    │
+    ├── 📂 repositories/      ← toda la lógica SQL aquí, nunca en routers
+    │   ├── dispositivo_repository.py
+    │   └── lectura_repository.py
+    │
+    ├── 📂 services/          ← reglas de negocio (rangos, alertas, outliers)
+    │   └── lectura_service.py
+    │
+    ├── 📂 routers/           ← endpoints HTTP
+    │   ├── lecturas.py       ← /api/v1/lecturas, /alertas, /outliers, etc.
+    │   └── dispositivos.py   ← /api/v1/dispositivos
+    │
+    └── 📂 middleware/
+        └── logging_middleware.py  ← loguea cada petición en consola
+```
+
+---
+
+## 🚀 Correr localmente
 
 ```powershell
-cd fastapi_iot_api
+# Desde la carpeta fastapi_iot_api/
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+
+# Crear el .env con las variables reales (copiar desde .env.example)
 python -m uvicorn app.main:app --reload
 ```
 
-Swagger en: http://127.0.0.1:8000/docs
+Swagger disponible en: http://127.0.0.1:8000/docs
 
 ---
 
-## Convenciones del código — léelas antes de tocar algo
+## 🔗 Endpoints
 
-Estos son los valores exactos que deben coincidir entre la BD, la API y el ESP32.
-Si cambias uno en un lado, cámbialo en todos.
+### Dispositivos
 
-### Códigos de sensor
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `POST` | `/api/v1/dispositivos` | Registra el ESP32 por su MAC. Hacerlo una sola vez antes de que empiece a enviar datos. |
+| `GET` | `/api/v1/dispositivos` | Lista todos los dispositivos registrados. |
+| `GET` | `/api/v1/dispositivos/{mac}` | Busca un dispositivo por su dirección MAC. |
 
-En la tabla `sensores` (columna `codigo`) y en el ESP32 (`tipo_sensor`), los valores son exactamente estos, en minúsculas y con guión bajo:
+### Lecturas y analítica
 
-```
-temperatura_ds18b20
-humedad_suelo_capacitivo
-```
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| `POST` | `/api/v1/lecturas` | `X-API-Key` | El ESP32 manda temperatura y humedad cada 20s. |
+| `GET` | `/api/v1/lecturas` | — | Historial. Filtra por `id_sensor`, `desde`, `hasta` y `limite`. |
+| `GET` | `/api/v1/alertas` | — | Lecturas que superaron un umbral definido en la BD. |
+| `GET` | `/api/v1/outliers` | — | Valores atípicos detectados por z-score. |
 
-En el ESP32 el payload se ve así:
-```json
-{
-  "tipo_sensor": "temperatura_ds18b20",
-  "valor": 35.25
-}
-```
+### Estado del sistema
 
-En la BD la columna `sensores.codigo` tiene exactamente ese mismo texto.  
-En `tipos_sensor.nombre` también debe coincidir exactamente.
-
-### MAC address del ESP32
-
-En el código del ESP32:
-```cpp
-const char* MAC_ESP32 = "20:43:a8:66:81:5c";
-```
-
-En la BD (`dispositivos.direccion_mac`) debe estar guardada igual:
-```
-20:43:a8:66:81:5c
-```
-Minúsculas, con dos puntos. Si la cambias en el ESP32, actualízala en la BD también.
-
-### API Key
-
-En el ESP32:
-```cpp
-const char* API_KEY = "1UmaEZRqgtvfpNQx4zcYsVwn";
-```
-
-En el `.env` de la API:
-```env
-API_KEY_ESP32=1UmaEZRqgtvfpNQx4zcYsVwn
-```
-
-En Render, en las variables de entorno, el mismo valor.  
-El ESP32 la manda en el header `X-API-Key`. Si no coincide, la API devuelve 401.
-
-### Estado de alertas
-
-La tabla `alertas` tiene un check constraint que solo acepta estos valores en la columna `estado`, en mayúsculas:
-
-```
-ACTIVA
-RECONOCIDA
-RESUELTA
-```
-
-En el código de la API (`models/alerta.py` y `repositories/lectura_repository.py`) se usa `"ACTIVA"`. No cambies eso a minúsculas o la BD lo rechaza.
-
-### Intervalo de envío
-
-El ESP32 envía cada 20 segundos:
-```cpp
-const long intervaloCaptura = 20000;
-```
-
-En la BD (`dispositivos.intervalo_envio_seg`) el valor registrado es `20`.
-
-### URL de la API en el ESP32
-
-```cpp
-const char* API_URL = "https://parcial-bryan.onrender.com/api/v1/lecturas";
-```
-
-Si cambian la URL de Render, hay que actualizar esa línea y volver a subir el código al ESP32.
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| `POST` | `/api/v1/conexion` | `X-API-Key` | El ESP32 reporta su estado WiFi y reintentos. |
+| `POST` | `/api/v1/menu` | `X-API-Key` | Registra qué tecla pulsó el usuario en el teclado físico. |
+| `GET` | `/health` | — | Verifica que la API está viva. |
 
 ---
 
-## Endpoints
+## 📨 Payload del ESP32
 
-| Método | Ruta | Header requerido | Descripción |
-|--------|------|-----------------|-------------|
-| GET | `/health` | — | La API está viva |
-| POST | `/api/v1/dispositivos` | — | Registrar ESP32 por MAC |
-| GET | `/api/v1/dispositivos` | — | Ver dispositivos |
-| GET | `/api/v1/dispositivos/{mac}` | — | Buscar por MAC |
-| POST | `/api/v1/lecturas` | `X-API-Key` | El ESP32 manda lecturas |
-| GET | `/api/v1/lecturas` | — | Historial de lecturas |
-| GET | `/api/v1/alertas` | — | Alertas generadas |
-| GET | `/api/v1/outliers` | — | Outliers por z-score |
-| POST | `/api/v1/conexion` | `X-API-Key` | Estado WiFi del ESP32 |
-| POST | `/api/v1/menu` | `X-API-Key` | Tecla pulsada en el teclado |
-
----
-
-## Formato del POST que manda el ESP32
+El ESP32 manda este JSON cada 20 segundos al endpoint `POST /api/v1/lecturas`:
 
 ```json
-POST /api/v1/lecturas
-X-API-Key: 1UmaEZRqgtvfpNQx4zcYsVwn
-Content-Type: application/json
-
 {
   "mac_address": "20:43:a8:66:81:5c",
   "lecturas": [
-    {"tipo_sensor": "temperatura_ds18b20",     "valor": 35.25},
-    {"tipo_sensor": "humedad_suelo_capacitivo", "valor": 60.0}
+    { "tipo_sensor": "temperatura_ds18b20",     "valor": 35.25 },
+    { "tipo_sensor": "humedad_suelo_capacitivo", "valor": 60.0  }
   ]
 }
 ```
 
-Si la API responde `201` todo salió bien.  
-Si responde `404` el dispositivo no está registrado en la BD.  
-Si responde `401` la API key no coincide.  
-Si responde `500` hay un error interno — revisar los logs en Render.
+Con el header:
+```
+X-API-Key: 1UmaEZRqgtvfpNQx4zcYsVwn
+```
+
+### Códigos de respuesta
+
+| Código | Significa | Qué hacer |
+|--------|-----------|-----------|
+| `201` | ✅ Guardado | Todo bien |
+| `401` | ❌ API key incorrecta | Verificar que coincide en el ESP32 y en el .env |
+| `404` | ❌ Dispositivo no existe | Registrar el ESP32 primero con POST /api/v1/dispositivos |
+| `422` | ❌ JSON malformado | Revisar los campos del payload |
+| `500` | ❌ Error interno | Abrir los logs en Render y buscar el traceback |
 
 ---
 
-## Variables de entorno
+## ⚙️ Variables de entorno
 
 Crear `fastapi_iot_api/.env` (no subir a git):
 
@@ -171,3 +147,82 @@ API_KEY_ESP32=1UmaEZRqgtvfpNQx4zcYsVwn
 ```
 
 En Render estas mismas dos variables van en **Environment → Add variable**.
+
+---
+
+## ⚠️ Convenciones del código
+
+Estos valores deben coincidir exactamente entre la BD, la API y el ESP32.
+Cámbialos en todos lados o en ninguno.
+
+### Códigos de sensor
+
+En `sensores.codigo`, en `tipos_sensor.nombre` y en el payload del ESP32,
+los valores son exactamente estos — minúsculas con guión bajo:
+
+```
+temperatura_ds18b20
+humedad_suelo_capacitivo
+```
+
+### MAC del dispositivo
+
+En el ESP32:
+```cpp
+const char* MAC_ESP32 = "20:43:a8:66:81:5c";
+```
+En `dispositivos.direccion_mac`: exactamente igual, minúsculas con dos puntos.
+
+### API Key
+
+En el ESP32:
+```cpp
+const char* API_KEY = "1UmaEZRqgtvfpNQx4zcYsVwn";
+```
+En `.env`: `API_KEY_ESP32=1UmaEZRqgtvfpNQx4zcYsVwn`  
+En Render: variable de entorno con el mismo valor.
+
+### Estado de alertas
+
+La columna `alertas.estado` tiene un check constraint en la BD.
+Solo acepta estos valores, **en mayúsculas**:
+
+```
+ACTIVA
+RECONOCIDA
+RESUELTA
+```
+
+Si mandas `activa` en minúsculas, la BD lo rechaza con error 500.
+
+### Intervalo de envío
+
+```cpp
+const long intervaloCaptura = 20000;  // 20 segundos
+```
+
+En `dispositivos.intervalo_envio_seg` el valor registrado es `20`.
+
+---
+
+## 🗄️ Capa de datos — cómo está organizado
+
+La API sigue un patrón por capas. Cada capa tiene una responsabilidad:
+
+```
+Router  →  recibe el HTTP, valida con Pydantic, responde JSON
+  │
+Service →  aplica las reglas de negocio (rangos, alertas, outliers)
+  │
+Repository → hace las queries SQL, nunca hay SQL en otra capa
+  │
+Model   →  define la tabla en SQLAlchemy
+```
+
+**Lo que hace el service cuando llega una lectura:**
+1. Busca el dispositivo por MAC — si no existe, devuelve 404
+2. Busca o crea el sensor por código
+3. Guarda la lectura en `lecturas`
+4. Verifica si el valor supera algún umbral → crea registro en `alertas`
+5. Calcula z-score → si > 2.0, crea registro en `outliers_detectados`
+6. Devuelve 201 con el resumen de lo que guardó
