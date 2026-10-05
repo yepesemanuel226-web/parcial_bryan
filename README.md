@@ -167,6 +167,8 @@ python -m uvicorn app.main:app --reload
 
 ### Conexión a Neon
 
+Proyecto en Neon: **iot-taller**, rama **production**.
+
 En el nodo **PostgreSQL Connector** pon esto:
 
 | Campo | Valor |
