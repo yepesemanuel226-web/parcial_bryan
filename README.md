@@ -1,53 +1,50 @@
-# Proyecto Integrador IoT — Taller 1 Corte 2 Minería de Datos
+# Proyecto IoT — Taller 1 Corte 2 Minería de Datos
 
-Sistema completo de extremo a extremo: ESP32 con sensores → API REST en la nube → PostgreSQL en Neon → análisis en KNIME → agente FlowiseAI.
+ESP32 con sensores que manda datos cada 20 segundos a una API en Render, que los guarda en Neon (PostgreSQL). Desde ahí KNIME analiza los datos y FlowiseAI responde preguntas sobre ellos.
 
 **Sensores:** Temperatura DS18B20 + Humedad de suelo capacitivo v2.0  
-**API en producción:** https://parcial-bryan.onrender.com  
-**Base de datos:** Neon (PostgreSQL)
+**API:** https://parcial-bryan.onrender.com  
+**BD:** Neon (PostgreSQL)
 
 ---
 
-## Arquitectura del sistema
+## Cómo funciona
 
 ```
-ESP32 (sensores + teclado matricial + LCD)
-    │
-    │  HTTP POST cada 20s (JSON)
+ESP32 (sensores + teclado + LCD)
+    │  POST cada 20s
     ▼
-FastAPI desplegada en Render
+FastAPI en Render
     │
-    │  SQLAlchemy + psycopg2
     ▼
 PostgreSQL en Neon (12 tablas)
     │
-    ├── KNIME (análisis + dashboard)
-    └── FlowiseAI (agente IA)
+    ├── KNIME
+    └── FlowiseAI
 ```
 
 ---
 
-## Estructura del proyecto
+## Archivos del proyecto
 
 ```
 parcial_bryan/
 ├── README.md
 ├── requirements.txt
-├── .env.example
-├── app.py                          # App analítica Streamlit
+├── app.py                      # Streamlit
 ├── esp32_sensor/
-│   └── esp32_sensor.ino            # Código ESP32 fusionado
+│   └── esp32_sensor.ino        # Código del ESP32
 └── fastapi_iot_api/
-    ├── .env                        # Variables reales (NO subir a git)
+    ├── .env                    # No subir a git
     ├── .env.example
     ├── requirements.txt
-    ├── runtime.txt                 # Fuerza Python 3.11 en Render
+    ├── runtime.txt
     ├── sql/
     │   └── init_timescale.sql
     └── app/
         ├── main.py
         ├── core/
-        ├── models/                 # 12 modelos ORM
+        ├── models/
         ├── schemas/
         ├── repositories/
         ├── services/
@@ -57,47 +54,16 @@ parcial_bryan/
 
 ---
 
-## Componente 1 — Base de datos (Neon / PostgreSQL)
+## Circuito ESP32
 
-### 12 tablas
+### Pines
 
-| Tabla | Descripción |
-|-------|-------------|
-| `ubicaciones` | Lugares donde se instalan los dispositivos |
-| `dispositivos` | ESP32 registrados por MAC |
-| `tipos_sensor` | Catálogo de sensores con rangos físicos |
-| `sensores` | Instancia física de cada sensor por dispositivo |
-| `lecturas` | **Hypertable** TimescaleDB — todas las mediciones |
-| `niveles_alerta` | Niveles de severidad (bajo, medio, alto) |
-| `umbrales_alerta` | Límites por tipo de sensor |
-| `alertas` | Lecturas que superaron un umbral |
-| `outliers_detectados` | Valores atípicos detectados por z-score |
-| `estado_conexion` | Historial de conexión WiFi del ESP32 |
-| `consultas_menu` | Registro de teclas pulsadas en el teclado |
-| `menu_opciones` | Catálogo de opciones del menú LCD |
-
-### Conexión directa a Neon
-
-```
-Host:     ep-misty-snow-b76w9eax-pooler.c-13.us-east-1.aws.neon.tech
-Puerto:   5432
-Base de datos: neondb
-Usuario:  neondb_owner
-SSL:      requerido (sslmode=require)
-```
-
----
-
-## Componente 2 — Circuito ESP32
-
-### Hardware
-
-| Componente | Pin ESP32 |
-|------------|-----------|
+| Componente | Pin |
+|------------|-----|
 | DS18B20 (temperatura) | GPIO 4 |
 | Sensor capacitivo (humedad) | GPIO 34 |
-| LCD I2C (SDA) | GPIO 22 |
-| LCD I2C (SCL) | GPIO 23 |
+| LCD SDA | GPIO 22 |
+| LCD SCL | GPIO 23 |
 | Teclado fila 1 | GPIO 13 |
 | Teclado fila 2 | GPIO 12 |
 | Teclado fila 3 | GPIO 14 |
@@ -107,58 +73,57 @@ SSL:      requerido (sslmode=require)
 | Teclado col 3 | GPIO 33 |
 | Teclado col 4 | GPIO 32 |
 
-### Menú del teclado matricial
+### Menú del teclado
 
-| Tecla | Función | Concepto analítico |
-|-------|---------|-------------------|
+| Tecla | Qué muestra | Concepto |
+|-------|-------------|----------|
 | 1 | Valor actual de cada sensor | Estadística descriptiva |
 | 2 | Promedio de la última hora | Media aritmética |
 | 3 | Máximo y mínimo del día | Rango estadístico |
 | 4 | Desviación estándar y tendencia | Dispersión y regresión |
-| 5 | Detección de outliers | Z-score |
-| 6 | Conteo de alertas activas | Umbral y anomalías |
-| 7 | Estado de conexión WiFi/nube | Monitoreo de sistema |
+| 5 | Outliers detectados | Z-score |
+| 6 | Alertas activas | Umbrales y anomalías |
+| 7 | Estado WiFi y nube | Monitoreo del sistema |
 | # / * | Volver al inicio | — |
 
-### Calibración del sensor de humedad
+### Calibración humedad
 
 ```cpp
-int valorSeco   = 3400;  // lectura al aire
-int valorHumedo = 1600;  // lectura en tierra saturada
+int valorSeco   = 3400;  // al aire
+int valorHumedo = 1600;  // en tierra saturada
 ```
 
-### Librerías Arduino requeridas
+### Librerías que hay que instalar en Arduino IDE
 
-Instalar desde el Gestor de Librerías de Arduino IDE:
-- `OneWire` by Paul Stoffregen
-- `DallasTemperature` by Miles Burton
-- `LiquidCrystal I2C` by Frank de Brabander
-- `ArduinoJson` by Benoit Blanchon
-- `Keypad` by Mark Stanley
+- `OneWire` — Paul Stoffregen
+- `DallasTemperature` — Miles Burton
+- `LiquidCrystal I2C` — Frank de Brabander
+- `ArduinoJson` — Benoit Blanchon
+- `Keypad` — Mark Stanley
 
-Board: **ESP32 Dev Module** (esp32 by Espressif Systems)
+Board: **ESP32 Dev Module**
 
 ---
 
-## Componente 3 — API REST (FastAPI en Render)
+## API (FastAPI)
 
 ### Endpoints
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/health` | Estado de la API |
-| POST | `/api/v1/dispositivos` | Registrar ESP32 por MAC |
-| GET | `/api/v1/dispositivos` | Listar dispositivos |
-| POST | `/api/v1/lecturas` | Recibir lecturas del ESP32 |
-| GET | `/api/v1/lecturas` | Consultar historial |
-| GET | `/api/v1/alertas` | Listar alertas |
-| GET | `/api/v1/outliers` | Listar outliers detectados |
-| POST | `/api/v1/conexion` | Reportar estado de conexión |
-| POST | `/api/v1/menu` | Registrar tecla pulsada |
+| Método | Ruta | Qué hace |
+|--------|------|----------|
+| GET | `/health` | Verificar que la API está viva |
+| POST | `/api/v1/dispositivos` | Registrar el ESP32 por MAC |
+| GET | `/api/v1/dispositivos` | Ver dispositivos registrados |
+| POST | `/api/v1/lecturas` | El ESP32 manda sus lecturas aquí |
+| GET | `/api/v1/lecturas` | Consultar el historial |
+| GET | `/api/v1/alertas` | Ver alertas generadas |
+| GET | `/api/v1/outliers` | Ver outliers detectados |
+| POST | `/api/v1/conexion` | El ESP32 reporta su estado de conexión |
+| POST | `/api/v1/menu` | Registra qué tecla se pulsó |
 
-Documentación interactiva: https://parcial-bryan.onrender.com/docs
+Swagger: https://parcial-bryan.onrender.com/docs
 
-### Variables de entorno (.env)
+### .env
 
 ```env
 DATABASE_URL=postgresql+psycopg2://neondb_owner:PASSWORD@ep-misty-snow-b76w9eax-pooler.c-13.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
@@ -172,17 +137,37 @@ cd fastapi_iot_api
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-# crear .env con las variables de arriba
 python -m uvicorn app.main:app --reload
 ```
 
 ---
 
-## Componente 4 — Análisis en KNIME
+## Base de datos (Neon)
 
-### Conexión a Neon desde KNIME
+### Tablas
 
-Usar el nodo **PostgreSQL Connector** con estos parámetros:
+| Tabla | Para qué es |
+|-------|-------------|
+| `ubicaciones` | Dónde está instalado el dispositivo |
+| `dispositivos` | El ESP32, identificado por MAC |
+| `tipos_sensor` | Catálogo de sensores con rangos válidos |
+| `sensores` | Cada sensor físico conectado al ESP32 |
+| `lecturas` | Todas las mediciones — es la hypertable |
+| `niveles_alerta` | Bajo, medio, alto |
+| `umbrales_alerta` | Límites por tipo de sensor |
+| `alertas` | Lecturas que pasaron un umbral |
+| `outliers_detectados` | Valores raros detectados por z-score |
+| `estado_conexion` | Historial de conexión WiFi del ESP32 |
+| `consultas_menu` | Registro de teclas pulsadas |
+| `menu_opciones` | Las 7 opciones del menú LCD |
+
+---
+
+## Para KNIME
+
+### Conexión a Neon
+
+En el nodo **PostgreSQL Connector** pon esto:
 
 | Campo | Valor |
 |-------|-------|
@@ -190,23 +175,22 @@ Usar el nodo **PostgreSQL Connector** con estos parámetros:
 | Port | `5432` |
 | Database | `neondb` |
 | Username | `neondb_owner` |
-| Password | *(solicitar al equipo)* |
-| SSL | Activado — `sslmode=require` |
+| Password | pídela al equipo |
+| SSL | activado |
 
-O usar directamente la URL JDBC:
+O si prefieres usar la URL JDBC directa:
 ```
 jdbc:postgresql://ep-misty-snow-b76w9eax-pooler.c-13.us-east-1.aws.neon.tech/neondb?sslmode=require
 ```
 
-### Query principal para el dataset
+### Query para el dataset principal
 
-Pegar en el nodo **DB Query Reader**:
+Pégala en el nodo **DB Query Reader**:
 
 ```sql
 SELECT
     l.tiempo,
     l.valor,
-    l.reenviada,
     s.codigo          AS sensor,
     t.nombre          AS tipo_sensor,
     t.unidad,
@@ -223,28 +207,17 @@ WHERE l.recibido_en >= '2026-10-05'
 ORDER BY l.tiempo DESC;
 ```
 
-> **Nota:** el filtro `recibido_en >= '2026-10-05'` excluye datos de prueba anteriores y trabaja solo con las lecturas reales del ESP32.
+El filtro `recibido_en >= '2026-10-05'` es importante — excluye datos de prueba que se cargaron antes y deja solo las lecturas reales del ESP32.
 
-### Tablas disponibles para análisis
-
-| Tabla | Uso sugerido en KNIME |
-|-------|----------------------|
-| `lecturas` | Dataset principal — serie temporal |
-| `alertas` | Análisis de anomalías |
-| `outliers_detectados` | Validación de outliers z-score |
-| `sensores` | Metadatos de cada sensor |
-| `tipos_sensor` | Rangos físicos para normalización |
-| `estado_conexion` | Análisis de disponibilidad del sistema |
-
-### Flujo sugerido en KNIME
+### Nodos sugeridos
 
 ```
 PostgreSQL Connector
-    └── DB Query Reader (query principal)
+    └── DB Query Reader
             └── DB to Table
-                    └── Missing Value (imputación)
+                    └── Missing Value
                             └── Duplicate Row Filter
                                     └── Normalizer
-                                            └── Statistics / Scatter Plot / ...
-                                                    └── CSV Writer (dataset limpio)
+                                            └── Statistics / Gráficas / ...
+                                                    └── CSV Writer
 ```
