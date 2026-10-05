@@ -1,27 +1,28 @@
-# Proyecto Integrador IoT — Minería de Datos
+# Proyecto Integrador IoT — Taller 1 Corte 2 Minería de Datos
 
-Sistema completo de captura, almacenamiento, análisis y visualización de datos en tiempo real usando ESP32, FastAPI, PostgreSQL/TimescaleDB y Streamlit.
+Sistema completo de extremo a extremo: ESP32 con sensores → API REST en la nube → PostgreSQL en Neon → análisis en KNIME → agente FlowiseAI.
 
-**Sensores:** Humedad de suelo capacitivo v2.0 + Temperatura DS18B20
+**Sensores:** Temperatura DS18B20 + Humedad de suelo capacitivo v2.0  
+**API en producción:** https://parcial-bryan.onrender.com  
+**Base de datos:** Neon (PostgreSQL)
 
 ---
 
 ## Arquitectura del sistema
 
 ```
-ESP32 (sensores)
+ESP32 (sensores + teclado matricial + LCD)
     │
-    │  HTTP POST cada 10s (JSON)
+    │  HTTP POST cada 20s (JSON)
     ▼
-FastAPI (API REST)
+FastAPI desplegada en Render
     │
     │  SQLAlchemy + psycopg2
     ▼
-TimescaleDB (TigerData Cloud)
+PostgreSQL en Neon (12 tablas)
     │
-    │  GET /api/v1/lecturas
-    ▼
-Streamlit (app analítica)
+    ├── KNIME (análisis + dashboard)
+    └── FlowiseAI (agente IA)
 ```
 
 ---
@@ -29,169 +30,221 @@ Streamlit (app analítica)
 ## Estructura del proyecto
 
 ```
-circuito/
-├── app.py                        # Aplicación analítica Streamlit (Fase 3)
-├── requirements.txt              # Dependencias unificadas
-├── .env.example                  # Plantilla de variables de entorno
+parcial_bryan/
+├── README.md
+├── requirements.txt
+├── .env.example
+├── app.py                          # App analítica Streamlit
 ├── esp32_sensor/
-│   └── esp32_sensor.ino          # Código Arduino para el ESP32 (Fase 1)
-└── fastapi_iot_api/              # API REST (Fase 2)
-    ├── .env                      # Variables de entorno reales (no subir a git)
+│   └── esp32_sensor.ino            # Código ESP32 fusionado
+└── fastapi_iot_api/
+    ├── .env                        # Variables reales (NO subir a git)
     ├── .env.example
     ├── requirements.txt
-    ├── README.md
+    ├── runtime.txt                 # Fuerza Python 3.11 en Render
     ├── sql/
-    │   └── init_timescale.sql    # Script de creación de tablas y datos semilla
+    │   └── init_timescale.sql
     └── app/
-        ├── main.py               # Punto de entrada FastAPI
+        ├── main.py
         ├── core/
-        │   ├── config.py         # Configuración (pydantic-settings)
-        │   └── database.py       # Conexión SQLAlchemy
-        ├── models/               # Modelos ORM (SQLAlchemy)
-        ├── schemas/              # Validación de datos (Pydantic)
-        ├── repositories/         # Acceso a la BD
-        ├── services/             # Lógica de negocio
-        ├── routers/              # Endpoints REST
-        └── middleware/           # Logging de peticiones
+        ├── models/                 # 12 modelos ORM
+        ├── schemas/
+        ├── repositories/
+        ├── services/
+        ├── routers/
+        └── middleware/
 ```
 
 ---
 
-## Fase 1 — Circuito ESP32
+## Componente 1 — Base de datos (Neon / PostgreSQL)
 
-El ESP32 captura datos de dos sensores cada 10 segundos y los envía a la API:
+### 12 tablas
 
-- **DS18B20** (temperatura) → pin 4, protocolo OneWire
-- **Sensor capacitivo v2.0** (humedad de suelo) → pin 34, señal analógica
+| Tabla | Descripción |
+|-------|-------------|
+| `ubicaciones` | Lugares donde se instalan los dispositivos |
+| `dispositivos` | ESP32 registrados por MAC |
+| `tipos_sensor` | Catálogo de sensores con rangos físicos |
+| `sensores` | Instancia física de cada sensor por dispositivo |
+| `lecturas` | **Hypertable** TimescaleDB — todas las mediciones |
+| `niveles_alerta` | Niveles de severidad (bajo, medio, alto) |
+| `umbrales_alerta` | Límites por tipo de sensor |
+| `alertas` | Lecturas que superaron un umbral |
+| `outliers_detectados` | Valores atípicos detectados por z-score |
+| `estado_conexion` | Historial de conexión WiFi del ESP32 |
+| `consultas_menu` | Registro de teclas pulsadas en el teclado |
+| `menu_opciones` | Catálogo de opciones del menú LCD |
 
-Valores de calibración del sensor de humedad:
-- `valorSeco = 3400` (lectura al aire)
-- `valorHumedo = 1600` (lectura sumergido en agua)
+### Conexión directa a Neon
 
-La LCD I2C muestra en tiempo real la temperatura, humedad y estado de conexión con la API (`API: OK` / `API: ERROR`).
-
-El código completo está en `esp32_sensor/esp32_sensor.ino`.
-
----
-
-## Fase 2 — API REST (FastAPI)
-
-### Levantar la API
-
-```powershell
-# Activar entorno virtual
-.venv\Scripts\Activate.ps1
-
-# Desde la carpeta fastapi_iot_api/
-cd fastapi_iot_api
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
-
-### Endpoints principales
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/health` | Estado de la API |
-| POST | `/api/v1/dispositivos` | Registrar ESP32 (por MAC) |
-| POST | `/api/v1/lecturas` | Recibir lecturas del ESP32 |
-| GET | `/api/v1/lecturas` | Consultar historial de lecturas |
-
-Documentación interactiva: `http://localhost:8000/docs`
-
-### Configuración (.env)
-
-Crear `fastapi_iot_api/.env` basándose en `.env.example`:
-
-```env
-DATABASE_URL=postgresql+psycopg2://tsdbadmin:PASSWORD@host:33257/tsdb?sslmode=require
-GRUPO_ID=1
-API_KEY_ESP32=tu-clave-secreta
-```
-
-### Base de datos (7 tablas)
-
-Creadas con `sql/init_timescale.sql`:
-
-1. `grupos` — identificación del grupo de trabajo
-2. `dispositivos` — registro de ESP32 por MAC address
-3. `tipos_sensor` — catálogo de sensores (temperatura, humedad)
-4. `sensores` — instancia física de cada sensor por dispositivo
-5. `lecturas` — hypertable TimescaleDB con todas las mediciones
-6. `alertas` — anomalías detectadas en las lecturas
-7. `api_logs` — registro de peticiones HTTP a la API
-
----
-
-## Fase 3 — Analítica en Streamlit
-
-### Cómo se construyó
-
-La app está desarrollada en Python usando **Streamlit** como framework de visualización interactiva. Se usaron las siguientes librerías:
-
-- **pandas** y **numpy** para manipulación y transformación de datos
-- **plotly** para gráficos interactivos (series de tiempo, histogramas, heatmaps, boxplots)
-- **scikit-learn** para los dos modelos de Machine Learning
-- **requests** para consumir la API REST desde la propia app
-- **sqlalchemy** para la conexión directa a PostgreSQL si se requiere
-
-Los datos se obtienen desde la API FastAPI mediante `GET /api/v1/lecturas`, se pivotean por timestamp para alinear las lecturas de temperatura y humedad en una sola fila, y se procesan en memoria con pandas antes de renderizarse.
-
-La app se divide en 5 secciones navegables desde la barra lateral:
-
-- **EDA y Filtros** — estadística descriptiva, serie de tiempo con media móvil y filtros dinámicos de fecha, variable y rango de valores
-- **Limpieza de datos** — eliminación de duplicados, imputación de nulos por interpolación y filtrado de outliers por IQR
-- **Detección de Outliers** — combinación de método IQR y Z-Score con visualización en serie de tiempo y descarga en CSV
-- **Correlación** — heatmap de Pearson y dispersión con línea de tendencia OLS
-- **Machine Learning** — Random Forest Regressor (predice humedad) y Random Forest Classifier (predice si necesita riego), ambos con métricas, gráficos y prueba manual interactiva
-
-### Filtros dinámicos disponibles en la barra lateral
-
-Todos los filtros aplican sobre los datos en memoria (pandas) y afectan todas las secciones de la app simultáneamente:
-
-- **Rango de fechas** — selecciona el periodo de tiempo a analizar (desde / hasta). Se actualiza automáticamente con el rango de los datos cargados.
-- **Variables a analizar** — elige qué sensores mostrar en las gráficas (humedad, temperatura o ambos).
-- **Rango de valor** — filtra registros por un rango numérico de la variable seleccionada. Útil para excluir lecturas fuera de un rango esperado.
-- **Excluir outliers (IQR)** — activa el filtrado automático de valores atípicos usando el rango intercuartílico. Afecta la limpieza, correlación y ML.
-
-### Levantar la app
-
-```powershell
-# Desde la raíz del proyecto, con el venv activo
-streamlit run app.py
-```
-
-Se abre en `http://localhost:8501`.
-
-### Fuente de datos
-
-En la barra lateral seleccionar **"API (FastAPI local)"** con:
-- URL base: `http://localhost:8000`
-- sensor_id de temperatura: `3`
-- sensor_id de humedad: `5`
-
-O **"Simulados (demo)"** para usar datos sintéticos sin necesidad de conexión.
-
----
-
-## Instalación
-
-```powershell
-# Crear entorno virtual
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-
-# Instalar todas las dependencias
-pip install -r requirements.txt
+Host:     ep-misty-snow-b76w9eax-pooler.c-13.us-east-1.aws.neon.tech
+Puerto:   5432
+Base de datos: neondb
+Usuario:  neondb_owner
+SSL:      requerido (sslmode=require)
 ```
 
 ---
 
-## Librerías Arduino (necesarias para el ESP32)
+## Componente 2 — Circuito ESP32
+
+### Hardware
+
+| Componente | Pin ESP32 |
+|------------|-----------|
+| DS18B20 (temperatura) | GPIO 4 |
+| Sensor capacitivo (humedad) | GPIO 34 |
+| LCD I2C (SDA) | GPIO 22 |
+| LCD I2C (SCL) | GPIO 23 |
+| Teclado fila 1 | GPIO 13 |
+| Teclado fila 2 | GPIO 12 |
+| Teclado fila 3 | GPIO 14 |
+| Teclado fila 4 | GPIO 27 |
+| Teclado col 1 | GPIO 26 |
+| Teclado col 2 | GPIO 25 |
+| Teclado col 3 | GPIO 33 |
+| Teclado col 4 | GPIO 32 |
+
+### Menú del teclado matricial
+
+| Tecla | Función | Concepto analítico |
+|-------|---------|-------------------|
+| 1 | Valor actual de cada sensor | Estadística descriptiva |
+| 2 | Promedio de la última hora | Media aritmética |
+| 3 | Máximo y mínimo del día | Rango estadístico |
+| 4 | Desviación estándar y tendencia | Dispersión y regresión |
+| 5 | Detección de outliers | Z-score |
+| 6 | Conteo de alertas activas | Umbral y anomalías |
+| 7 | Estado de conexión WiFi/nube | Monitoreo de sistema |
+| # / * | Volver al inicio | — |
+
+### Calibración del sensor de humedad
+
+```cpp
+int valorSeco   = 3400;  // lectura al aire
+int valorHumedo = 1600;  // lectura en tierra saturada
+```
+
+### Librerías Arduino requeridas
 
 Instalar desde el Gestor de Librerías de Arduino IDE:
 - `OneWire` by Paul Stoffregen
 - `DallasTemperature` by Miles Burton
 - `LiquidCrystal I2C` by Frank de Brabander
 - `ArduinoJson` by Benoit Blanchon
+- `Keypad` by Mark Stanley
 
-Board: **esp32 by Espressif Systems** — seleccionar **ESP32 Dev Module**.
+Board: **ESP32 Dev Module** (esp32 by Espressif Systems)
+
+---
+
+## Componente 3 — API REST (FastAPI en Render)
+
+### Endpoints
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/health` | Estado de la API |
+| POST | `/api/v1/dispositivos` | Registrar ESP32 por MAC |
+| GET | `/api/v1/dispositivos` | Listar dispositivos |
+| POST | `/api/v1/lecturas` | Recibir lecturas del ESP32 |
+| GET | `/api/v1/lecturas` | Consultar historial |
+| GET | `/api/v1/alertas` | Listar alertas |
+| GET | `/api/v1/outliers` | Listar outliers detectados |
+| POST | `/api/v1/conexion` | Reportar estado de conexión |
+| POST | `/api/v1/menu` | Registrar tecla pulsada |
+
+Documentación interactiva: https://parcial-bryan.onrender.com/docs
+
+### Variables de entorno (.env)
+
+```env
+DATABASE_URL=postgresql+psycopg2://neondb_owner:PASSWORD@ep-misty-snow-b76w9eax-pooler.c-13.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+API_KEY_ESP32=1UmaEZRqgtvfpNQx4zcYsVwn
+```
+
+### Correr localmente
+
+```powershell
+cd fastapi_iot_api
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+# crear .env con las variables de arriba
+python -m uvicorn app.main:app --reload
+```
+
+---
+
+## Componente 4 — Análisis en KNIME
+
+### Conexión a Neon desde KNIME
+
+Usar el nodo **PostgreSQL Connector** con estos parámetros:
+
+| Campo | Valor |
+|-------|-------|
+| Hostname | `ep-misty-snow-b76w9eax-pooler.c-13.us-east-1.aws.neon.tech` |
+| Port | `5432` |
+| Database | `neondb` |
+| Username | `neondb_owner` |
+| Password | *(solicitar al equipo)* |
+| SSL | Activado — `sslmode=require` |
+
+O usar directamente la URL JDBC:
+```
+jdbc:postgresql://ep-misty-snow-b76w9eax-pooler.c-13.us-east-1.aws.neon.tech/neondb?sslmode=require
+```
+
+### Query principal para el dataset
+
+Pegar en el nodo **DB Query Reader**:
+
+```sql
+SELECT
+    l.tiempo,
+    l.valor,
+    l.reenviada,
+    s.codigo          AS sensor,
+    t.nombre          AS tipo_sensor,
+    t.unidad,
+    t.valor_min_fisico,
+    t.valor_max_fisico,
+    d.nombre          AS dispositivo,
+    u.nombre          AS ubicacion
+FROM lecturas l
+JOIN sensores s      ON l.id_sensor      = s.id_sensor
+JOIN tipos_sensor t  ON s.id_tipo_sensor = t.id_tipo_sensor
+JOIN dispositivos d  ON s.id_dispositivo = d.id_dispositivo
+JOIN ubicaciones u   ON d.id_ubicacion   = u.id_ubicacion
+WHERE l.recibido_en >= '2026-10-05'
+ORDER BY l.tiempo DESC;
+```
+
+> **Nota:** el filtro `recibido_en >= '2026-10-05'` excluye datos de prueba anteriores y trabaja solo con las lecturas reales del ESP32.
+
+### Tablas disponibles para análisis
+
+| Tabla | Uso sugerido en KNIME |
+|-------|----------------------|
+| `lecturas` | Dataset principal — serie temporal |
+| `alertas` | Análisis de anomalías |
+| `outliers_detectados` | Validación de outliers z-score |
+| `sensores` | Metadatos de cada sensor |
+| `tipos_sensor` | Rangos físicos para normalización |
+| `estado_conexion` | Análisis de disponibilidad del sistema |
+
+### Flujo sugerido en KNIME
+
+```
+PostgreSQL Connector
+    └── DB Query Reader (query principal)
+            └── DB to Table
+                    └── Missing Value (imputación)
+                            └── Duplicate Row Filter
+                                    └── Normalizer
+                                            └── Statistics / Scatter Plot / ...
+                                                    └── CSV Writer (dataset limpio)
+```
