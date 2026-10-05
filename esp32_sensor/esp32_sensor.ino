@@ -133,11 +133,16 @@ const long    intervaloWifiCheck      = 2000;
 unsigned long tiempoUltimaTecla       = 0;
 const long    TIEMPO_INACTIVIDAD      = 15000;
 
+unsigned long tiempoAnteriorConexion  = 0;
+const long    intervaloConexion       = 60000; // reportar estado cada 60 s
+
 // ============================================================
 //  ESTADO DE CONEXIÓN
 // ============================================================
-bool wifiConectado = false;
-bool nubeConectada = false; // Se actualiza con la respuesta real del POST
+bool wifiConectado     = false;
+bool nubeConectada     = false;
+bool wifiAnterior      = false; // para detectar cambios de estado
+int  contadorReintentos = 0;
 
 // ============================================================
 //  SETUP
@@ -178,6 +183,10 @@ void setup() {
   }
 
   wifiConectado = (WiFi.status() == WL_CONNECTED);
+  wifiAnterior  = wifiConectado;
+
+  // Reportar estado inicial de conexión
+  if (wifiConectado) reportarConexion(true);
 
   lcd.clear();
   if (wifiConectado) {
@@ -228,10 +237,23 @@ void loop() {
   // --- Verificar estado WiFi periódicamente ---
   if (ahora - tiempoAnteriorWifiCheck >= intervaloWifiCheck) {
     tiempoAnteriorWifiCheck = ahora;
-    wifiConectado = (WiFi.status() == WL_CONNECTED);
-    // nubeConectada se actualiza con la respuesta del POST;
-    // aquí solo reseteamos si se perdió la red.
+    bool wifiAhora = (WiFi.status() == WL_CONNECTED);
+
+    // Detectar cambio de estado (perdió o recuperó conexión)
+    if (wifiAhora != wifiAnterior) {
+      if (!wifiAhora) contadorReintentos++;
+      reportarConexion(wifiAhora);
+      wifiAnterior = wifiAhora;
+    }
+
+    wifiConectado = wifiAhora;
     if (!wifiConectado) nubeConectada = false;
+  }
+
+  // --- Reportar estado de conexión periódicamente (cada 60s) ---
+  if (ahora - tiempoAnteriorConexion >= intervaloConexion) {
+    tiempoAnteriorConexion = ahora;
+    reportarConexion(wifiConectado);
   }
 
   // --- Volver al inicio por inactividad ---
@@ -388,6 +410,41 @@ int contarAlertas() {
     if (bufferTemp[i] >= UMBRAL_ALTA_TEMP) contador++;
   }
   return contador;
+}
+
+// ============================================================
+//  REPORTE DE ESTADO DE CONEXIÓN A LA API
+// ============================================================
+void reportarConexion(bool conectado) {
+  if (!conectado) {
+    Serial.println("[CONEXION] Sin WiFi, no se reporta estado.");
+    return;
+  }
+
+  HTTPClient http;
+  http.begin("https://parcial-bryan.onrender.com/api/v1/conexion");
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("X-API-Key", API_KEY);
+
+  int rssi = WiFi.RSSI();
+
+  StaticJsonDocument<200> doc;
+  doc["mac_address"]        = MAC_ESP32;
+  doc["conectado"]          = conectado;
+  doc["rssi_dbm"]           = rssi;
+  doc["reintentos"]         = contadorReintentos;
+  doc["lecturas_en_buffer"] = muestrasGuardadas;
+
+  String body;
+  serializeJson(doc, body);
+
+  int httpCode = http.POST(body);
+  Serial.print("[CONEXION] Estado reportado → HTTP ");
+  Serial.print(httpCode);
+  Serial.print(" | RSSI: ");
+  Serial.print(rssi);
+  Serial.println(" dBm");
+  http.end();
 }
 
 // ============================================================
