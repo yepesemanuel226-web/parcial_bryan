@@ -294,7 +294,29 @@ PostgreSQL Connector
 
 ---
 
-## ⚠️ Convenciones — no cambies esto sin avisar
+## 🤖 Componente 5 — Agente FlowiseAI
+
+El agente está configurado en el archivo `Agente taller iot Chatflow.json`. Usa **Google Gemini** como modelo y se conecta directamente a Neon para responder preguntas en lenguaje natural sobre los datos de los sensores.
+
+### Para importarlo en FlowiseAI
+
+1. Tener Docker Desktop corriendo
+2. Ejecutar en PowerShell:
+   ```powershell
+   docker start flowise
+   ```
+3. Abrir `http://localhost:3000`
+4. Ir a **Chatflows** → **Add New** → importar `Agente taller iot Chatflow.json`
+5. En el nodo **ChatGoogleGenerativeAI** agregar la credencial de Gemini
+6. En el nodo **SqlDatabaseChain** reemplazar `TU_PASSWORD` con la contraseña real de Neon
+
+### API Key de Gemini
+
+Cada integrante debe crear la suya en **[aistudio.google.com](https://aistudio.google.com)** → Get API Key. Es gratis y tarda menos de un minuto. No compartir ni subir la clave al repo.
+
+### Modelo
+
+El agente usa `gemini-3-flash-preview`. Si ese modelo deja de estar disponible, cambiarlo en el nodo **ChatGoogleGenerativeAI** por el modelo más reciente disponible en AI Studio.
 
 | Valor | Dónde aparece | Exactamente así |
 |-------|--------------|-----------------|
