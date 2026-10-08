@@ -1,0 +1,675 @@
+{
+  "nodes": [
+    {
+      "id": "sqlDatabaseChain_0",
+      "position": {
+        "x": -226.02137718096148,
+        "y": 376.68110479949246
+      },
+      "type": "customNode",
+      "data": {
+        "id": "sqlDatabaseChain_0",
+        "label": "Sql Database Chain",
+        "version": 5,
+        "name": "sqlDatabaseChain",
+        "type": "SqlDatabaseChain",
+        "baseClasses": [
+          "SqlDatabaseChain",
+          "BaseChain",
+          "Runnable"
+        ],
+        "category": "Chains",
+        "description": "Answer questions over a SQL database",
+        "inputParams": [
+          {
+            "label": "Database",
+            "name": "database",
+            "type": "options",
+            "options": [
+              {
+                "label": "SQLite",
+                "name": "sqlite"
+              },
+              {
+                "label": "PostgreSQL",
+                "name": "postgres"
+              },
+              {
+                "label": "MSSQL",
+                "name": "mssql"
+              },
+              {
+                "label": "MySQL",
+                "name": "mysql"
+              }
+            ],
+            "default": "sqlite",
+            "id": "sqlDatabaseChain_0-input-database-options"
+          },
+          {
+            "label": "Connection string or file path (sqlite only)",
+            "name": "url",
+            "type": "string",
+            "placeholder": "127.0.0.1:5432/chinook",
+            "id": "sqlDatabaseChain_0-input-url-string"
+          },
+          {
+            "label": "Include Tables",
+            "name": "includesTables",
+            "type": "string",
+            "description": "Tables to include for queries, separated by comma. Can only use Include Tables or Ignore Tables",
+            "placeholder": "table1, table2",
+            "additionalParams": true,
+            "optional": true,
+            "id": "sqlDatabaseChain_0-input-includesTables-string"
+          },
+          {
+            "label": "Ignore Tables",
+            "name": "ignoreTables",
+            "type": "string",
+            "description": "Tables to ignore for queries, separated by comma. Can only use Ignore Tables or Include Tables",
+            "placeholder": "table1, table2",
+            "additionalParams": true,
+            "optional": true,
+            "id": "sqlDatabaseChain_0-input-ignoreTables-string"
+          },
+          {
+            "label": "Sample table's rows info",
+            "name": "sampleRowsInTableInfo",
+            "type": "number",
+            "description": "Number of sample row for tables to load for info.",
+            "placeholder": "3",
+            "additionalParams": true,
+            "optional": true,
+            "id": "sqlDatabaseChain_0-input-sampleRowsInTableInfo-number"
+          },
+          {
+            "label": "Top Keys",
+            "name": "topK",
+            "type": "number",
+            "description": "If you are querying for several rows of a table you can select the maximum number of results you want to get by using the \"top_k\" parameter (default is 10). This is useful for avoiding query results that exceed the prompt max length or consume tokens unnecessarily.",
+            "placeholder": "10",
+            "additionalParams": true,
+            "optional": true,
+            "id": "sqlDatabaseChain_0-input-topK-number"
+          },
+          {
+            "label": "Custom Prompt",
+            "name": "customPrompt",
+            "type": "string",
+            "description": "You can provide custom prompt to the chain. This will override the existing default prompt used. See <a target=\"_blank\" href=\"https://python.langchain.com/docs/integrations/tools/sqlite#customize-prompt\">guide</a>",
+            "warning": "Prompt must include 3 input variables: {input}, {dialect}, {table_info}. You can refer to official guide from description above",
+            "rows": 4,
+            "placeholder": "Given an input question, first create a syntactically correct {dialect} query to run, then look at the results of the query and return the answer. Unless the user specifies in his question a specific number of examples he wishes to obtain, always limit your query to at most {top_k} results. You can order the results by a relevant column to return the most interesting examples in the database.\n\nNever query for all the columns from a specific table, only ask for a the few relevant columns given the question.\n\nPay attention to use only the column names that you can see in the schema description. Be careful to not query for columns that do not exist. Also, pay attention to which column is in which table.\n\nUse the following format:\n\nQuestion: \"Question here\"\nSQLQuery: \"SQL Query to run\"\nSQLResult: \"Result of the SQLQuery\"\nAnswer: \"Final answer here\"\n\nOnly use the tables listed below.\n\n{table_info}\n\nQuestion: {input}f-string",
+            "additionalParams": true,
+            "optional": true,
+            "id": "sqlDatabaseChain_0-input-customPrompt-string"
+          }
+        ],
+        "inputAnchors": [
+          {
+            "label": "Language Model",
+            "name": "model",
+            "type": "BaseLanguageModel",
+            "id": "sqlDatabaseChain_0-input-model-BaseLanguageModel"
+          },
+          {
+            "label": "Input Moderation",
+            "description": "Detect text that could generate harmful output and prevent it from being sent to the language model",
+            "name": "inputModeration",
+            "type": "Moderation",
+            "optional": true,
+            "list": true,
+            "id": "sqlDatabaseChain_0-input-inputModeration-Moderation"
+          }
+        ],
+        "inputs": {
+          "model": "{{chatGoogleGenerativeAI_0.data.instance}}",
+          "database": "postgres",
+          "url": "postgresql://neondb_owner:TU_PASSWORD@ep-misty-snow-b76w9eax-pooler.c-13.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+          "includesTables": "",
+          "ignoreTables": "",
+          "sampleRowsInTableInfo": "",
+          "topK": "",
+          "customPrompt": "Eres un experto en {dialect}. Dada una pregunta, crea una consulta {dialect} sintácticamente correcta, luego observa el resultado y responde en español de forma breve y natural.\n\nUsa como máximo {top_k} resultados. Escribe las palabras clave SQL en inglés (SELECT, FROM, WHERE), sin traducirlas. Usa solo las tablas y columnas del esquema.\n\nUsa exactamente este formato:\n\nQuestion: pregunta del usuario\nSQLQuery: consulta SQL a ejecutar\nSQLResult: resultado de la consulta\nAnswer: respuesta final en español\n\nEsquema:\n{table_info}\n\nQuestion: {input}",
+          "inputModeration": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "sqlDatabaseChain_0-output-sqlDatabaseChain-SqlDatabaseChain|BaseChain|Runnable",
+            "name": "sqlDatabaseChain",
+            "label": "SqlDatabaseChain",
+            "description": "Answer questions over a SQL database",
+            "type": "SqlDatabaseChain | BaseChain | Runnable"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 300,
+      "height": 546,
+      "selected": false,
+      "positionAbsolute": {
+        "x": -226.02137718096148,
+        "y": 376.68110479949246
+      },
+      "dragging": false
+    },
+    {
+      "id": "chatGoogleGenerativeAI_0",
+      "position": {
+        "x": 125.96777321075274,
+        "y": 320.3621648851719
+      },
+      "type": "customNode",
+      "data": {
+        "id": "chatGoogleGenerativeAI_0",
+        "label": "ChatGoogleGenerativeAI",
+        "version": 3,
+        "name": "chatGoogleGenerativeAI",
+        "type": "ChatGoogleGenerativeAI",
+        "baseClasses": [
+          "ChatGoogleGenerativeAI",
+          "LangchainChatGoogleGenerativeAI",
+          "BaseChatModel",
+          "BaseLanguageModel",
+          "Runnable"
+        ],
+        "category": "Chat Models",
+        "description": "Wrapper around Google Gemini large language models that use the Chat endpoint",
+        "inputParams": [
+          {
+            "label": "Connect Credential",
+            "name": "credential",
+            "type": "credential",
+            "credentialNames": [
+              "googleGenerativeAI"
+            ],
+            "optional": false,
+            "description": "Google Generative AI credential.",
+            "id": "chatGoogleGenerativeAI_0-input-credential-credential"
+          },
+          {
+            "label": "Model Name",
+            "name": "modelName",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "default": "gemini-1.5-flash-latest",
+            "id": "chatGoogleGenerativeAI_0-input-modelName-asyncOptions"
+          },
+          {
+            "label": "Custom Model Name",
+            "name": "customModelName",
+            "type": "string",
+            "placeholder": "gemini-1.5-pro-exp-0801",
+            "description": "Custom model name to use. If provided, it will override the model selected",
+            "additionalParams": true,
+            "id": "chatGoogleGenerativeAI_0-input-customModelName-string"
+          },
+          {
+            "label": "Temperature",
+            "name": "temperature",
+            "type": "number",
+            "step": 0.1,
+            "default": 0.9,
+            "optional": true,
+            "id": "chatGoogleGenerativeAI_0-input-temperature-number"
+          },
+          {
+            "label": "Streaming",
+            "name": "streaming",
+            "type": "boolean",
+            "default": true,
+            "optional": true,
+            "additionalParams": true,
+            "id": "chatGoogleGenerativeAI_0-input-streaming-boolean"
+          },
+          {
+            "label": "Max Output Tokens",
+            "name": "maxOutputTokens",
+            "type": "number",
+            "step": 1,
+            "optional": true,
+            "additionalParams": true,
+            "id": "chatGoogleGenerativeAI_0-input-maxOutputTokens-number"
+          },
+          {
+            "label": "Top Probability",
+            "name": "topP",
+            "type": "number",
+            "step": 0.1,
+            "optional": true,
+            "additionalParams": true,
+            "id": "chatGoogleGenerativeAI_0-input-topP-number"
+          },
+          {
+            "label": "Top Next Highest Probability Tokens",
+            "name": "topK",
+            "type": "number",
+            "description": "Decode using top-k sampling: consider the set of top_k most probable tokens. Must be positive",
+            "step": 1,
+            "optional": true,
+            "additionalParams": true,
+            "id": "chatGoogleGenerativeAI_0-input-topK-number"
+          },
+          {
+            "label": "Harm Category",
+            "name": "harmCategory",
+            "type": "multiOptions",
+            "description": "Refer to <a target=\"_blank\" href=\"https://cloud.google.com/vertex-ai/docs/generative-ai/multimodal/configure-safety-attributes#safety_attribute_definitions\">official guide</a> on how to use Harm Category",
+            "options": [
+              {
+                "label": "Dangerous",
+                "name": "HARM_CATEGORY_DANGEROUS_CONTENT"
+              },
+              {
+                "label": "Harassment",
+                "name": "HARM_CATEGORY_HARASSMENT"
+              },
+              {
+                "label": "Hate Speech",
+                "name": "HARM_CATEGORY_HATE_SPEECH"
+              },
+              {
+                "label": "Sexually Explicit",
+                "name": "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+              }
+            ],
+            "optional": true,
+            "additionalParams": true,
+            "id": "chatGoogleGenerativeAI_0-input-harmCategory-multiOptions"
+          },
+          {
+            "label": "Harm Block Threshold",
+            "name": "harmBlockThreshold",
+            "type": "multiOptions",
+            "description": "Refer to <a target=\"_blank\" href=\"https://cloud.google.com/vertex-ai/docs/generative-ai/multimodal/configure-safety-attributes#safety_setting_thresholds\">official guide</a> on how to use Harm Block Threshold",
+            "options": [
+              {
+                "label": "Low and Above",
+                "name": "BLOCK_LOW_AND_ABOVE"
+              },
+              {
+                "label": "Medium and Above",
+                "name": "BLOCK_MEDIUM_AND_ABOVE"
+              },
+              {
+                "label": "None",
+                "name": "BLOCK_NONE"
+              },
+              {
+                "label": "Only High",
+                "name": "BLOCK_ONLY_HIGH"
+              },
+              {
+                "label": "Threshold Unspecified",
+                "name": "HARM_BLOCK_THRESHOLD_UNSPECIFIED"
+              }
+            ],
+            "optional": true,
+            "additionalParams": true,
+            "id": "chatGoogleGenerativeAI_0-input-harmBlockThreshold-multiOptions"
+          },
+          {
+            "label": "Allow Image Uploads",
+            "name": "allowImageUploads",
+            "type": "boolean",
+            "description": "Allow image input. Refer to the <a href=\"https://docs.flowiseai.com/using-flowise/uploads#image\" target=\"_blank\">docs</a> for more details.",
+            "default": false,
+            "optional": true,
+            "id": "chatGoogleGenerativeAI_0-input-allowImageUploads-boolean"
+          }
+        ],
+        "inputAnchors": [
+          {
+            "label": "Cache",
+            "name": "cache",
+            "type": "BaseCache",
+            "optional": true,
+            "id": "chatGoogleGenerativeAI_0-input-cache-BaseCache"
+          }
+        ],
+        "inputs": {
+          "cache": "",
+          "modelName": "gemini-3-flash-preview",
+          "customModelName": "",
+          "temperature": "0",
+          "streaming": true,
+          "maxOutputTokens": "",
+          "topP": "",
+          "topK": "",
+          "harmCategory": "",
+          "harmBlockThreshold": "",
+          "allowImageUploads": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "chatGoogleGenerativeAI_0-output-chatGoogleGenerativeAI-ChatGoogleGenerativeAI|LangchainChatGoogleGenerativeAI|BaseChatModel|BaseLanguageModel|Runnable",
+            "name": "chatGoogleGenerativeAI",
+            "label": "ChatGoogleGenerativeAI",
+            "description": "Wrapper around Google Gemini large language models that use the Chat endpoint",
+            "type": "ChatGoogleGenerativeAI | LangchainChatGoogleGenerativeAI | BaseChatModel | BaseLanguageModel | Runnable"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 300,
+      "height": 669,
+      "selected": false,
+      "dragging": false,
+      "positionAbsolute": {
+        "x": 125.96777321075274,
+        "y": 320.3621648851719
+      }
+    },
+    {
+      "id": "toolAgent_0",
+      "position": {
+        "x": 476.91582403579025,
+        "y": 335.00487703282874
+      },
+      "type": "customNode",
+      "data": {
+        "id": "toolAgent_0",
+        "label": "Tool Agent",
+        "version": 2,
+        "name": "toolAgent",
+        "type": "AgentExecutor",
+        "baseClasses": [
+          "AgentExecutor",
+          "BaseChain",
+          "Runnable"
+        ],
+        "category": "Agents",
+        "description": "Agent that uses Function Calling to pick the tools and args to call",
+        "inputParams": [
+          {
+            "label": "System Message",
+            "name": "systemMessage",
+            "type": "string",
+            "default": "You are a helpful AI assistant.",
+            "description": "If Chat Prompt Template is provided, this will be ignored",
+            "rows": 4,
+            "optional": true,
+            "additionalParams": true,
+            "id": "toolAgent_0-input-systemMessage-string"
+          },
+          {
+            "label": "Max Iterations",
+            "name": "maxIterations",
+            "type": "number",
+            "optional": true,
+            "additionalParams": true,
+            "id": "toolAgent_0-input-maxIterations-number"
+          }
+        ],
+        "inputAnchors": [
+          {
+            "label": "Tools",
+            "name": "tools",
+            "type": "Tool",
+            "list": true,
+            "id": "toolAgent_0-input-tools-Tool"
+          },
+          {
+            "label": "Memory",
+            "name": "memory",
+            "type": "BaseChatMemory",
+            "id": "toolAgent_0-input-memory-BaseChatMemory"
+          },
+          {
+            "label": "Tool Calling Chat Model",
+            "name": "model",
+            "type": "BaseChatModel",
+            "description": "Only compatible with models that are capable of function calling: ChatOpenAI, ChatMistral, ChatAnthropic, ChatGoogleGenerativeAI, ChatVertexAI, GroqChat",
+            "id": "toolAgent_0-input-model-BaseChatModel"
+          },
+          {
+            "label": "Chat Prompt Template",
+            "name": "chatPromptTemplate",
+            "type": "ChatPromptTemplate",
+            "description": "Override existing prompt with Chat Prompt Template. Human Message must includes {input} variable",
+            "optional": true,
+            "id": "toolAgent_0-input-chatPromptTemplate-ChatPromptTemplate"
+          },
+          {
+            "label": "Input Moderation",
+            "description": "Detect text that could generate harmful output and prevent it from being sent to the language model",
+            "name": "inputModeration",
+            "type": "Moderation",
+            "optional": true,
+            "list": true,
+            "id": "toolAgent_0-input-inputModeration-Moderation"
+          }
+        ],
+        "inputs": {
+          "tools": [
+            "{{customTool_0.data.instance}}"
+          ],
+          "memory": "{{bufferMemory_0.data.instance}}",
+          "model": "{{chatGoogleGenerativeAI_0.data.instance}}",
+          "chatPromptTemplate": "",
+          "systemMessage": "Eres un asistente de un taller de IoT. Responde siempre en español, de forma breve y natural. Para responder preguntas sobre datos de sensores usa la herramienta consultar_lecturas con una consulta SQL SELECT válida en PostgreSQL (palabras clave SQL en inglés). La tabla \"lecturas\" tiene las columnas: tiempo, id_sensor, valor, reenviada, recibido_en. Si no conoces las columnas de otra tabla, consulta information_schema.columns. Nunca muestres la consulta SQL ni resultados crudos; entrega solo la respuesta final.",
+          "inputModeration": "",
+          "maxIterations": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "toolAgent_0-output-toolAgent-AgentExecutor|BaseChain|Runnable",
+            "name": "toolAgent",
+            "label": "AgentExecutor",
+            "description": "Agent that uses Function Calling to pick the tools and args to call",
+            "type": "AgentExecutor | BaseChain | Runnable"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 300,
+      "height": 503,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 476.91582403579025,
+        "y": 335.00487703282874
+      },
+      "dragging": false
+    },
+    {
+      "id": "bufferMemory_0",
+      "position": {
+        "x": 819.0098780898439,
+        "y": 319.0935256814774
+      },
+      "type": "customNode",
+      "data": {
+        "id": "bufferMemory_0",
+        "label": "Buffer Memory",
+        "version": 2,
+        "name": "bufferMemory",
+        "type": "BufferMemory",
+        "baseClasses": [
+          "BufferMemory",
+          "BaseChatMemory",
+          "BaseMemory"
+        ],
+        "category": "Memory",
+        "description": "Retrieve chat messages stored in database",
+        "inputParams": [
+          {
+            "label": "Session Id",
+            "name": "sessionId",
+            "type": "string",
+            "description": "If not specified, a random id will be used. Learn <a target=\"_blank\" href=\"https://docs.flowiseai.com/memory#ui-and-embedded-chat\">more</a>",
+            "default": "",
+            "additionalParams": true,
+            "optional": true,
+            "id": "bufferMemory_0-input-sessionId-string"
+          },
+          {
+            "label": "Memory Key",
+            "name": "memoryKey",
+            "type": "string",
+            "default": "chat_history",
+            "additionalParams": true,
+            "id": "bufferMemory_0-input-memoryKey-string"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "sessionId": "",
+          "memoryKey": "chat_history"
+        },
+        "outputAnchors": [
+          {
+            "id": "bufferMemory_0-output-bufferMemory-BufferMemory|BaseChatMemory|BaseMemory",
+            "name": "bufferMemory",
+            "label": "BufferMemory",
+            "description": "Retrieve chat messages stored in database",
+            "type": "BufferMemory | BaseChatMemory | BaseMemory"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 300,
+      "height": 251,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 819.0098780898439,
+        "y": 319.0935256814774
+      },
+      "dragging": false
+    },
+    {
+      "id": "customTool_0",
+      "position": {
+        "x": 827.9600132249792,
+        "y": 621.409201357153
+      },
+      "type": "customNode",
+      "data": {
+        "id": "customTool_0",
+        "label": "Custom Tool",
+        "version": 3,
+        "name": "customTool",
+        "type": "CustomTool",
+        "baseClasses": [
+          "CustomTool",
+          "Tool",
+          "StructuredTool",
+          "Runnable"
+        ],
+        "category": "Tools",
+        "description": "Use custom tool you've created in Flowise within chatflow",
+        "inputParams": [
+          {
+            "label": "Select Tool",
+            "name": "selectedTool",
+            "type": "asyncOptions",
+            "loadMethod": "listTools",
+            "id": "customTool_0-input-selectedTool-asyncOptions"
+          },
+          {
+            "label": "Return Direct",
+            "name": "returnDirect",
+            "description": "Return the output of the tool directly to the user",
+            "type": "boolean",
+            "optional": true,
+            "id": "customTool_0-input-returnDirect-boolean"
+          },
+          {
+            "label": "Custom Tool Name",
+            "name": "customToolName",
+            "type": "string",
+            "hidden": true,
+            "id": "customTool_0-input-customToolName-string"
+          },
+          {
+            "label": "Custom Tool Description",
+            "name": "customToolDesc",
+            "type": "string",
+            "hidden": true,
+            "id": "customTool_0-input-customToolDesc-string"
+          },
+          {
+            "label": "Custom Tool Schema",
+            "name": "customToolSchema",
+            "type": "string",
+            "hidden": true,
+            "id": "customTool_0-input-customToolSchema-string"
+          },
+          {
+            "label": "Custom Tool Func",
+            "name": "customToolFunc",
+            "type": "string",
+            "hidden": true,
+            "id": "customTool_0-input-customToolFunc-string"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "selectedTool": "0f4e63a1-d192-47f0-8e15-10d151baf049",
+          "returnDirect": "",
+          "customToolName": "",
+          "customToolDesc": "",
+          "customToolSchema": "",
+          "customToolFunc": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "customTool_0-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+            "name": "customTool",
+            "label": "CustomTool",
+            "description": "Use custom tool you've created in Flowise within chatflow",
+            "type": "CustomTool | Tool | StructuredTool | Runnable"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 300,
+      "height": 371,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 827.9600132249792,
+        "y": 621.409201357153
+      },
+      "dragging": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "chatGoogleGenerativeAI_0",
+      "sourceHandle": "chatGoogleGenerativeAI_0-output-chatGoogleGenerativeAI-ChatGoogleGenerativeAI|LangchainChatGoogleGenerativeAI|BaseChatModel|BaseLanguageModel|Runnable",
+      "target": "sqlDatabaseChain_0",
+      "targetHandle": "sqlDatabaseChain_0-input-model-BaseLanguageModel",
+      "type": "buttonedge",
+      "id": "chatGoogleGenerativeAI_0-chatGoogleGenerativeAI_0-output-chatGoogleGenerativeAI-ChatGoogleGenerativeAI|LangchainChatGoogleGenerativeAI|BaseChatModel|BaseLanguageModel|Runnable-sqlDatabaseChain_0-sqlDatabaseChain_0-input-model-BaseLanguageModel"
+    },
+    {
+      "source": "customTool_0",
+      "sourceHandle": "customTool_0-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+      "target": "toolAgent_0",
+      "targetHandle": "toolAgent_0-input-tools-Tool",
+      "type": "buttonedge",
+      "id": "customTool_0-customTool_0-output-customTool-CustomTool|Tool|StructuredTool|Runnable-toolAgent_0-toolAgent_0-input-tools-Tool"
+    },
+    {
+      "source": "chatGoogleGenerativeAI_0",
+      "sourceHandle": "chatGoogleGenerativeAI_0-output-chatGoogleGenerativeAI-ChatGoogleGenerativeAI|LangchainChatGoogleGenerativeAI|BaseChatModel|BaseLanguageModel|Runnable",
+      "target": "toolAgent_0",
+      "targetHandle": "toolAgent_0-input-model-BaseChatModel",
+      "type": "buttonedge",
+      "id": "chatGoogleGenerativeAI_0-chatGoogleGenerativeAI_0-output-chatGoogleGenerativeAI-ChatGoogleGenerativeAI|LangchainChatGoogleGenerativeAI|BaseChatModel|BaseLanguageModel|Runnable-toolAgent_0-toolAgent_0-input-model-BaseChatModel"
+    },
+    {
+      "source": "bufferMemory_0",
+      "sourceHandle": "bufferMemory_0-output-bufferMemory-BufferMemory|BaseChatMemory|BaseMemory",
+      "target": "toolAgent_0",
+      "targetHandle": "toolAgent_0-input-memory-BaseChatMemory",
+      "type": "buttonedge",
+      "id": "bufferMemory_0-bufferMemory_0-output-bufferMemory-BufferMemory|BaseChatMemory|BaseMemory-toolAgent_0-toolAgent_0-input-memory-BaseChatMemory"
+    }
+  ]
+}
