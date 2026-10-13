@@ -228,7 +228,7 @@ Usar el nodo **PostgreSQL Connector**:
 | Port | `5432` |
 | Database | `neondb` |
 | Username | `neondb_owner` |
-| Password | pídela al equipo |
+| Password | `npg_9Z3jOBHkPWca` |
 | SSL | activado (`sslmode=require`) |
 
 URL JDBC directa:
