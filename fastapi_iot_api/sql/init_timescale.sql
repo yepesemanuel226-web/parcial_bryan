@@ -1,104 +1,192 @@
 -- =============================================================
--- Script de creación de base de datos - Taller Integrador IoT
--- Sensores del grupo: DS18B20 (temperatura) + Humedad de suelo
--- capacitivo v2.0
---
--- IMPORTANTE: estos nombres de tabla y columna deben coincidir
--- EXACTO con los modelos SQLAlchemy de la carpeta app/models/.
--- Si cambias algo aquí, avísale a quien tiene la API.
+-- Script de creación de base de datos - Taller IoT
+-- Proyecto: iot-taller | Rama: production | BD: neondb
+-- 12 tablas + hypertable TimescaleDB
 -- =============================================================
 
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
--- 1) Grupos --------------------------------------------------
-CREATE TABLE IF NOT EXISTS grupos (
-    id            SERIAL PRIMARY KEY,
+-- 1) Ubicaciones
+CREATE TABLE IF NOT EXISTS ubicaciones (
+    id_ubicacion  SMALLINT PRIMARY KEY,
     nombre        VARCHAR(100) NOT NULL,
-    integrantes   VARCHAR(300),
-    creado_en     TIMESTAMPTZ NOT NULL DEFAULT now()
+    descripcion   TEXT
 );
 
--- 2) Dispositivos (ESP32) -------------------------------------
+-- 2) Dispositivos (ESP32)
 CREATE TABLE IF NOT EXISTS dispositivos (
-    id            SERIAL PRIMARY KEY,
-    grupo_id      INTEGER NOT NULL REFERENCES grupos(id),
-    nombre        VARCHAR(100) NOT NULL,
-    mac_address   VARCHAR(17) NOT NULL UNIQUE,
-    ubicacion     VARCHAR(150),
-    activo        BOOLEAN NOT NULL DEFAULT TRUE,
-    creado_en     TIMESTAMPTZ NOT NULL DEFAULT now()
+    id_dispositivo       SMALLINT PRIMARY KEY,
+    nombre               VARCHAR(100) NOT NULL,
+    modelo               VARCHAR(50) NOT NULL,
+    direccion_mac        VARCHAR(17) UNIQUE,
+    id_ubicacion         SMALLINT NOT NULL REFERENCES ubicaciones(id_ubicacion),
+    intervalo_envio_seg  SMALLINT NOT NULL DEFAULT 20,
+    activo               BOOLEAN NOT NULL DEFAULT TRUE,
+    fecha_registro       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 3) Catálogo de tipos de sensor -------------------------------
+-- 3) Tipos de sensor
 CREATE TABLE IF NOT EXISTS tipos_sensor (
-    id            SERIAL PRIMARY KEY,
-    codigo        VARCHAR(50) NOT NULL UNIQUE,
-    nombre        VARCHAR(100) NOT NULL,
-    unidad_medida VARCHAR(20) NOT NULL,
-    valor_min     NUMERIC(8,2) NOT NULL,
-    valor_max     NUMERIC(8,2) NOT NULL
+    id_tipo_sensor    SMALLINT PRIMARY KEY,
+    nombre            VARCHAR(100) NOT NULL,
+    magnitud          VARCHAR(50) NOT NULL,
+    unidad            VARCHAR(20) NOT NULL,
+    valor_min_fisico  NUMERIC NOT NULL,
+    valor_max_fisico  NUMERIC NOT NULL
 );
 
--- 4) Sensores (instancia física por dispositivo) ---------------
+-- 4) Sensores (instancia física por dispositivo)
 CREATE TABLE IF NOT EXISTS sensores (
-    id              SERIAL PRIMARY KEY,
-    dispositivo_id  INTEGER NOT NULL REFERENCES dispositivos(id),
-    tipo_sensor_id  INTEGER NOT NULL REFERENCES tipos_sensor(id),
-    pin             VARCHAR(20),
-    descripcion     VARCHAR(150),
+    id_sensor         SMALLINT PRIMARY KEY,
+    id_dispositivo    SMALLINT NOT NULL REFERENCES dispositivos(id_dispositivo),
+    id_tipo_sensor    SMALLINT NOT NULL REFERENCES tipos_sensor(id_tipo_sensor),
+    codigo            VARCHAR(50) NOT NULL,
+    modelo            VARCHAR(50),
+    pin_conexion      VARCHAR(20),
+    activo            BOOLEAN NOT NULL DEFAULT TRUE,
+    fecha_instalacion DATE NOT NULL
+);
+
+-- 5) Lecturas (hypertable TimescaleDB)
+CREATE TABLE IF NOT EXISTS lecturas (
+    tiempo       TIMESTAMPTZ NOT NULL,
+    id_sensor    SMALLINT NOT NULL REFERENCES sensores(id_sensor),
+    valor        DOUBLE PRECISION,
+    reenviada    BOOLEAN NOT NULL DEFAULT FALSE,
+    recibido_en  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tiempo, id_sensor)
+);
+
+SELECT create_hypertable('lecturas', 'tiempo', if_not_exists => TRUE);
+
+CREATE INDEX IF NOT EXISTS idx_lecturas_sensor_tiempo ON lecturas (id_sensor, tiempo DESC);
+
+-- 6) Niveles de alerta
+CREATE TABLE IF NOT EXISTS niveles_alerta (
+    id_nivel   SMALLINT PRIMARY KEY,
+    nombre     VARCHAR(50) NOT NULL,
+    prioridad  SMALLINT NOT NULL
+);
+
+-- 7) Umbrales de alerta
+CREATE TABLE IF NOT EXISTS umbrales_alerta (
+    id_umbral       SMALLINT PRIMARY KEY,
+    id_tipo_sensor  SMALLINT NOT NULL REFERENCES tipos_sensor(id_tipo_sensor),
+    id_nivel        SMALLINT NOT NULL REFERENCES niveles_alerta(id_nivel),
+    limite_inferior NUMERIC,
+    limite_superior NUMERIC,
     activo          BOOLEAN NOT NULL DEFAULT TRUE
 );
 
--- 5) Lecturas (hypertable de TimescaleDB) -----------------------
-CREATE TABLE IF NOT EXISTS lecturas (
-    id          SERIAL,
-    sensor_id   INTEGER NOT NULL REFERENCES sensores(id),
-    valor       NUMERIC(10,3) NOT NULL,
-    timestamp   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (id, timestamp)
-);
-
--- Convierte "lecturas" en hypertable particionada por timestamp
-SELECT create_hypertable('lecturas', 'timestamp', if_not_exists => TRUE);
-
--- "id" ya es único (viene de una secuencia global), pero como la PK de
--- un hypertable debe incluir la columna de tiempo, agregamos esta
--- restricción UNIQUE aparte para poder referenciar "lecturas.id"
--- desde la tabla "alertas" con una llave foránea.
-ALTER TABLE lecturas ADD CONSTRAINT lecturas_id_unique UNIQUE (id);
-
--- 6) Alertas / anomalías -----------------------------------------
+-- 8) Alertas
 CREATE TABLE IF NOT EXISTS alertas (
-    id             SERIAL PRIMARY KEY,
-    lectura_id     INTEGER NOT NULL REFERENCES lecturas(id),
-    tipo_anomalia  VARCHAR(50) NOT NULL,
-    descripcion    VARCHAR(250),
-    creado_en      TIMESTAMPTZ NOT NULL DEFAULT now()
+    id_alerta      BIGINT PRIMARY KEY,
+    id_sensor      SMALLINT NOT NULL REFERENCES sensores(id_sensor),
+    id_umbral      SMALLINT NOT NULL REFERENCES umbrales_alerta(id_umbral),
+    tiempo_lectura TIMESTAMPTZ NOT NULL,
+    valor          DOUBLE PRECISION NOT NULL,
+    estado         VARCHAR(20) NOT NULL DEFAULT 'ACTIVA'
+                   CHECK (estado IN ('ACTIVA', 'RECONOCIDA', 'RESUELTA')),
+    creada_en      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resuelta_en    TIMESTAMPTZ
 );
 
--- 7) Logs de la API -----------------------------------------------
-CREATE TABLE IF NOT EXISTS api_logs (
-    id           SERIAL PRIMARY KEY,
-    endpoint     VARCHAR(150) NOT NULL,
-    metodo       VARCHAR(10) NOT NULL,
-    ip_origen    VARCHAR(50),
-    status_code  INTEGER,
-    creado_en    TIMESTAMPTZ NOT NULL DEFAULT now()
+-- 9) Outliers detectados
+CREATE TABLE IF NOT EXISTS outliers_detectados (
+    id_outlier     BIGINT PRIMARY KEY,
+    id_sensor      SMALLINT NOT NULL REFERENCES sensores(id_sensor),
+    tiempo_lectura TIMESTAMPTZ NOT NULL,
+    valor          DOUBLE PRECISION NOT NULL,
+    z_score        NUMERIC,
+    metodo         VARCHAR(30) NOT NULL DEFAULT 'zscore',
+    detectado_en   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Índices útiles para los filtros que usará Streamlit / Power BI
-CREATE INDEX IF NOT EXISTS idx_lecturas_sensor_timestamp ON lecturas (sensor_id, timestamp DESC);
+-- 10) Estado de conexión
+CREATE TABLE IF NOT EXISTS estado_conexion (
+    id_evento          BIGINT PRIMARY KEY,
+    id_dispositivo     SMALLINT NOT NULL REFERENCES dispositivos(id_dispositivo),
+    tiempo             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    conectado          BOOLEAN NOT NULL,
+    rssi_dbm           SMALLINT,
+    reintentos         SMALLINT NOT NULL DEFAULT 0,
+    lecturas_en_buffer SMALLINT NOT NULL DEFAULT 0
+);
+
+-- 11) Consultas del menú (teclado matricial)
+CREATE TABLE IF NOT EXISTS consultas_menu (
+    id_consulta    BIGINT PRIMARY KEY,
+    id_dispositivo SMALLINT NOT NULL REFERENCES dispositivos(id_dispositivo),
+    tecla          CHAR(1) NOT NULL,
+    tiempo         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 12) Opciones del menú
+CREATE TABLE IF NOT EXISTS menu_opciones (
+    tecla               CHAR(1) PRIMARY KEY,
+    nombre              VARCHAR(100) NOT NULL,
+    descripcion         TEXT,
+    concepto_analitica  VARCHAR(100) NOT NULL
+);
+
+-- Vista materializada de promedios por hora (lecturas_horarias)
+CREATE MATERIALIZED VIEW IF NOT EXISTS lecturas_horarias AS
+SELECT
+    time_bucket('1 hour', tiempo) AS hora,
+    id_sensor,
+    AVG(valor)    AS promedio,
+    MIN(valor)    AS minimo,
+    MAX(valor)    AS maximo,
+    STDDEV(valor) AS desviacion,
+    COUNT(*)      AS n_lecturas
+FROM lecturas
+GROUP BY 1, 2
+WITH NO DATA;
 
 -- =============================================================
--- Datos semilla: catálogo de sensores de ESTE grupo
+-- Datos semilla
 -- =============================================================
-INSERT INTO tipos_sensor (codigo, nombre, unidad_medida, valor_min, valor_max)
+
+INSERT INTO ubicaciones (id_ubicacion, nombre, descripcion)
+VALUES (1, 'Laboratorio de Sistemas', 'Sitio donde se instala el prototipo IoT')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO tipos_sensor (id_tipo_sensor, nombre, magnitud, unidad, valor_min_fisico, valor_max_fisico)
 VALUES
-    ('temperatura_ds18b20', 'Temperatura DS18B20', '°C', -10, 60),
-    ('humedad_suelo_capacitivo', 'Humedad de suelo capacitivo v2.0', '%', 0, 100)
-ON CONFLICT (codigo) DO NOTHING;
+    (1, 'temperatura_ds18b20',     'Temperatura ambiente', '°C', -40, 80),
+    (2, 'humedad_suelo_capacitivo','Humedad relativa',      '%',   0, 100)
+ON CONFLICT DO NOTHING;
 
--- Grupo y dispositivo de ejemplo (ajusta el nombre/integrantes reales)
-INSERT INTO grupos (nombre, integrantes)
-VALUES ('Grupo D', 'Integrante 1, Integrante 2, Integrante 3, Integrante 4, Integrante 5')
+INSERT INTO niveles_alerta (id_nivel, nombre, prioridad)
+VALUES
+    (1, 'bajo',  1),
+    (2, 'medio', 2),
+    (3, 'alto',  3)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO umbrales_alerta (id_umbral, id_tipo_sensor, id_nivel, limite_inferior, limite_superior, activo)
+VALUES
+    (1, 1, 2, 5.0,  35.0, TRUE),
+    (2, 2, 2, 10.0, 90.0, TRUE)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO dispositivos (id_dispositivo, nombre, modelo, direccion_mac, id_ubicacion, intervalo_envio_seg, activo)
+VALUES (1, 'ESP32 Grupo D', 'ESP32-WROOM-32', '20:43:a8:66:81:5c', 1, 20, TRUE)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO sensores (id_sensor, id_dispositivo, id_tipo_sensor, codigo, modelo, pin_conexion, activo, fecha_instalacion)
+VALUES
+    (1, 1, 1, 'temperatura_ds18b20',     'DS18B20',       'GPIO4',  TRUE, CURRENT_DATE),
+    (2, 1, 2, 'humedad_suelo_capacitivo','Capacitivo v2.0','GPIO34', TRUE, CURRENT_DATE)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO menu_opciones (tecla, nombre, descripcion, concepto_analitica)
+VALUES
+    ('1', 'Tiempo real',    'Valor actual de cada sensor',         'Estadística descriptiva'),
+    ('2', 'Promedio hora',  'Promedio de la última hora',          'Media aritmética'),
+    ('3', 'Max/Min día',    'Máximo y mínimo del día',             'Rango estadístico'),
+    ('4', 'Desv/Tendencia', 'Desviación estándar y tendencia',     'Dispersión y regresión'),
+    ('5', 'Outliers',       'Detección de valores atípicos',       'Z-score'),
+    ('6', 'Alertas',        'Conteo de alertas activas',           'Umbrales y anomalías'),
+    ('7', 'Conexión nube',  'Estado de conexión WiFi y API',       'Monitoreo del sistema')
 ON CONFLICT DO NOTHING;
