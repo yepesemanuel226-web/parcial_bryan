@@ -62,8 +62,8 @@ DallasTemperature sensorTemp(&oneWire);
 //  CONFIGURACIÓN SENSOR DE HUMEDAD CAPACITIVO
 // ============================================================
 #define PIN_HUMEDAD 34
-int valorSeco   = 3400;
-int valorHumedo = 1600;
+int valorSeco   = 3520;  // lectura RAW al aire (~3500-3520)
+int valorHumedo = 1400;  // lectura RAW en tierra saturada
 
 // ============================================================
 //  UMBRAL DE ALARMA / ALERTA
